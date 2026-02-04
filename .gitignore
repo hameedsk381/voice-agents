@@ -56,10 +56,18 @@ backend/env/
 backend/venv/
 
 # Frontend specific
-frontend/node_modules/
+**/node_modules/
 frontend/build/
 frontend/dist/
 frontend/.next/
 frontend/out/
 frontend/public/bundle.js
 frontend/public/bundle.js.map
+
+# Backend specific
+backend/__pycache__/
+backend/*.pyc
+backend/env/
+backend/venv/
+**/__pycache__/
+**/*.pyc
