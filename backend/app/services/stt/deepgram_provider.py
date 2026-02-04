@@ -14,7 +14,7 @@ class DeepgramSTT(STTProvider):
         else:
             self.client = DeepgramClient(api_key=self.api_key)
 
-    async def transcribe(self, audio_bytes: bytes, language: str = "en-US") -> str:
+    async def transcribe(self, audio_bytes: bytes, language: str = "en-US", mimetype: str = "audio/wav") -> str:
         """
         One-off transcription for an audio chunk.
         """
@@ -32,7 +32,7 @@ class DeepgramSTT(STTProvider):
             options["language"] = language
         
         response = self.client.listen.prerecorded.v("1").transcribe_file(
-            {"buffer": audio_bytes, "mimetype": "audio/wav"}, 
+            {"buffer": audio_bytes, "mimetype": mimetype}, 
             options
         )
         return response["results"]["channels"][0]["alternatives"][0]["transcript"]

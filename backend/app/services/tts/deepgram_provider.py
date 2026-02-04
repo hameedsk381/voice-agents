@@ -8,21 +8,24 @@ class DeepgramTTS(TTSProvider):
     def __init__(self, api_key: str = None):
         self.api_key = api_key or settings.DEEPGRAM_API_KEY
 
-    async def synthesize(self, text: str, language: str = "en-US") -> bytes:
+    async def synthesize(self, text: str, language: str = "en-US", voice: str = None) -> bytes:
         if not self.api_key:
             return b"mock_audio_missing_key"
 
-        # Map language to models
-        lang_main = language.split("-")[0].lower()
-        model_map = {
-            "en": "aura-asteria-en",
-            "es": "aura-luna-es",
-            "fr": "aura-luna-fr",
-            "de": "aura-luna-de",
-            "pt": "aura-luna-pt",
-        }
-        
-        selected_model = model_map.get(lang_main, "aura-asteria-en")
+        # Map language to models if voice not specified
+        if voice and voice != "auto":
+            selected_model = voice
+        else:
+            lang_main = language.split("-")[0].lower()
+            model_map = {
+                "en": "aura-asteria-en",
+                "es": "aura-luna-es",
+                "fr": "aura-luna-fr",
+                "de": "aura-luna-de",
+                "pt": "aura-luna-pt",
+            }
+            selected_model = model_map.get(lang_main, "aura-asteria-en")
+            
         url = f"https://api.deepgram.com/v1/speak?model={selected_model}"
 
         headers = {

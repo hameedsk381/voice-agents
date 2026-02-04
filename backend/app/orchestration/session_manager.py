@@ -164,7 +164,7 @@ class SessionManager:
         
         logger.info(f"Session {session_id} ended: {reason}")
     
-        return active
+        return True
 
     async def get_all_active_sessions(self) -> List[Dict[str, Any]]:
         """Get details for all globally active sessions."""

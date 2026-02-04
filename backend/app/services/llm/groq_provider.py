@@ -21,7 +21,7 @@ class GroqLLM(LLMProvider):
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         
         kwargs = {
-            "model": "llama3-70b-8192",
+            "model": "llama-3.3-70b-versatile",
             "messages": messages,
             "temperature": 0.7,
         }
@@ -83,7 +83,7 @@ class GroqLLM(LLMProvider):
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         
         stream = await self.client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             stream=True,
             temperature=0.7,
