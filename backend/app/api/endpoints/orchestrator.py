@@ -150,7 +150,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str, db: Session = 
     await monitoring_service.broadcast_event(session_id, "session_start", {
         "agent_id": agent_id,
         "agent_name": agent.name,
-        "caller_id": caller_id
+        "caller_id": None  # Would come from telephony
     })
     
     # Initialize orchestrator and conversation flow
