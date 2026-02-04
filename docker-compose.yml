@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # --- Core Infrastructure ---
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: openvoice-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: openvoice
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - openvoice-network
+
+  redis:
+    image: redis:7
+    container_name: openvoice-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - openvoice-network
+
+  # --- Temporal Orchestration ---
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: openvoice-temporal
+    ports:
+      - "7233:7233" # gRPC
+      - "8233:8233" # UI
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      - postgres
+    networks:
+      - openvoice-network
+
+  # --- Application ---
+  # We will run backend locally for dev, but here is the definition
+  # backend:
+  #   build: ./backend
+  #   ports:
+  #     - "8000:8000"
+  #   env_file: ./backend/.env
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #     - temporal
+
+volumes:
+  postgres_data:
+  temporal_data:
+
+networks:
+  openvoice-network:
+    driver: bridge
