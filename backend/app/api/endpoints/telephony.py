@@ -14,7 +14,7 @@ from app.services.telephony_service import telephony_service
 from app.services.stt.deepgram_provider import DeepgramSTT
 from app.services.tts.deepgram_provider import DeepgramTTS
 from app.services.llm.groq_provider import GroqLLM
-from app.services.llm.openai_provider import OpenAILLM
+
 from app.services.memory import get_memory_service
 from app.services.analytics_service import AnalyticsService
 from app.services.monitoring_service import monitoring_service
@@ -29,7 +29,8 @@ from datetime import datetime
 if settings.GROQ_API_KEY:
     llm_service = GroqLLM()
 else:
-    llm_service = OpenAILLM(api_key=settings.OPENAI_API_KEY)
+    logger.error("No GROQ_API_KEY found. Groq LLM required.")
+    llm_service = GroqLLM() 
 
 stt_service = DeepgramSTT()
 tts_service = DeepgramTTS()

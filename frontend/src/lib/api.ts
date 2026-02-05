@@ -67,6 +67,18 @@ const api = {
         if (!res.ok) throw new Error(`POST ${endpoint} failed`);
         return res.json();
     },
+    async put(endpoint: string, data: any) {
+        const res = await fetch(`${API_URL}${endpoint}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error(`PUT ${endpoint} failed`);
+        return res.json();
+    },
     async delete(endpoint: string) {
         const res = await fetch(`${API_URL}${endpoint}`, {
             method: 'DELETE',

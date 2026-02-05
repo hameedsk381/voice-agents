@@ -10,13 +10,15 @@ import {
     LogOut,
     Activity,
     ShieldCheck,
-    ShoppingBag
+    ShoppingBag,
+    Volume2
 } from "lucide-react";
 
 const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Marketplace', href: '/dashboard/marketplace', icon: ShoppingBag },
     { name: 'Agents', href: '/dashboard/agents', icon: Users },
+    { name: 'Voice Lab', href: '/dashboard/voices', icon: Volume2 },
     { name: 'Campaigns', href: '/dashboard/campaigns', icon: PhoneCall },
     { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity },
     { name: 'Approvals', href: '/dashboard/approvals', icon: ShieldCheck },

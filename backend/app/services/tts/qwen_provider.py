@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import asyncio
+from typing import Optional
 from .base import TTSProvider
 from loguru import logger
 
@@ -9,68 +10,81 @@ class QwenTTS(TTSProvider):
     def __init__(self, base_url: str = "http://127.0.0.1:8008"):
         self.base_url = base_url
 
-    async def synthesize(self, text: str, language: str = "en-US", voice: str = None) -> bytes:
+    async def synthesize(self, text: str, language: str = "en-US", voice: str = None, instruct: str = None) -> bytes:
         """
-        Synthesize text using Qwen3-TTS.
-        Priority:
-        1. If voice is a UUID, assume it's a saved voice -> /tts/voice_clone
-        2. If voice is provided but not UUID, assume it's a standard speaker -> /tts/custom_voice
-        3. Default to speaker "Vivian" -> /tts/custom_voice
+        Synthesize text using Qwen3-TTS v2.1.0.
+        Uses multipart/form-data as per new documentation.
         """
         if not voice or voice == "auto":
             voice = "Vivian"
 
-        # Heuristic: Valid UUID means saved voice ID
-        is_uuid = False
+        url = f"{self.base_url}/tts/custom_voice"
+        
+        # multipart/form-data
+        data = {
+            "text": (None, text),
+            "speaker": (None, voice),
+            "language": (None, "Auto"),
+            "instruct": (None, instruct or "")
+        }
+
         try:
-            if len(voice) == 36 and voice.count('-') == 4:
-                is_uuid = True
-        except:
-            pass
-
-        if is_uuid:
-            # Use Voice Clone endpoint with saved voice_id
-            url = f"{self.base_url}/tts/voice_clone"
-            # Multipart form data needed for this endpoint based on OpenAPI docs?
-            # Docs say: Body_voice_clone_tts_voice_clone_post: input is multipart/form-data
-            # text (string), voice_id (string), language (string)
-            
-            # Using requests for multipart/form-data with no actual file (since we use voice_id)
-            # We must send 'text', 'voice_id'. 
-            data = {
-                "text": text,
-                "voice_id": voice,
-                "language": "Auto" # Or map language if needed
-            }
-            try:
-                # Run blocking request in thread
-                response = await asyncio.to_thread(requests.post, url, data=data)
-            except Exception as e:
-                logger.error(f"QwenTTS Clone Connection Error: {e}")
-                return b""
-
-        else:
-            # Use Custom Voice endpoint (Standard Speakers)
-            url = f"{self.base_url}/tts/custom_voice"
-            # Docs say: Body_custom_voice_tts_custom_voice_post: input is application/x-www-form-urlencoded
-            # text, speaker, language
-            data = {
-                "text": text,
-                "speaker": voice,
-                "language": "Auto" 
-            }
-            try:
-                # Run blocking request in thread
-                response = await asyncio.to_thread(requests.post, url, data=data)
-            except Exception as e:
-                logger.error(f"QwenTTS Custom Connection Error: {e}")
-                return b""
+            # Run blocking request in thread
+            # To send as multipart/form-data with no files, we pass a dict of {field: (None, value)} to files
+            response = await asyncio.to_thread(requests.post, url, files=data)
+        except Exception as e:
+            logger.error(f"QwenTTS Connection Error: {e}")
+            return b""
 
         if response.status_code == 200:
             return response.content
         else:
             logger.error(f"QwenTTS Error ({response.status_code}): {response.text}")
             return b""
+
+    async def design_voice(self, text: str, instruct: str) -> bytes:
+        """Create a unique voice from a description."""
+        url = f"{self.base_url}/tts/voice_design"
+        data = {
+            "text": (None, text),
+            "instruct": (None, instruct)
+        }
+        try:
+            response = await asyncio.to_thread(requests.post, url, files=data)
+            if response.status_code == 200:
+                return response.content
+            return b""
+        except Exception as e:
+            logger.error(f"Voice Design Error: {e}")
+            return b""
+
+    async def register_voice(self, name: str, ref_text: str, ref_audio_path: str) -> Optional[str]:
+        """Clone a voice and register it."""
+        url = f"{self.base_url}/voices"
+        try:
+            with open(ref_audio_path, "rb") as f:
+                files = {
+                    "name": (None, name),
+                    "ref_text": (None, ref_text),
+                    "ref_audio": (os.path.basename(ref_audio_path), f, "audio/wav")
+                }
+                response = await asyncio.to_thread(requests.post, url, files=files)
+                if response.status_code == 200:
+                    return response.json().get("id")
+            return None
+        except Exception as e:
+            logger.error(f"Voice Registration Error: {e}")
+            return None
+
+    async def delete_voice(self, voice_id: str) -> bool:
+        """Delete a registered voice."""
+        url = f"{self.base_url}/voices/{voice_id}"
+        try:
+            response = await asyncio.to_thread(requests.delete, url)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Voice Deletion Error: {e}")
+            return False
 
     async def get_voices(self):
         """Fetch available voices from the service."""

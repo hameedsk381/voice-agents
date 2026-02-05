@@ -4,7 +4,7 @@ Inspired by memU architecture - provides persistent, cross-call memory.
 """
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, JSON, Float, Text, ForeignKey, Index
+from sqlalchemy import Column, String, DateTime, JSON, Float, Text, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.core.database import Base
@@ -18,15 +18,21 @@ class MemoryItem(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, index=True, nullable=True)  # Caller ID or user ID
     agent_id = Column(String, index=True, nullable=True)  # Which agent created this
+    organization_id = Column(String, index=True, nullable=True)
     
     # Memory content
     category = Column(String, index=True)  # e.g., "preferences", "personal_info", "history"
+    memory_type = Column(String, default="user_claim") # user_claim, system_verified, regulated_fact
     key = Column(String, index=True)  # e.g., "name", "preferred_language", "last_order"
     value = Column(Text)  # The actual memory content
     
     # Context
     source_session_id = Column(String, nullable=True)  # Which session this came from
     confidence = Column(Float, default=1.0)  # How confident we are in this memory
+    
+    # Governance
+    expires_at = Column(DateTime, nullable=True) # TTL for memory
+    is_sensitive = Column(Boolean, default=False) # Whether memory contains sensitive data
     
     # Vector embedding for semantic search
     embedding = Column(Vector(384))  # Using sentence-transformers all-MiniLM-L6-v2
@@ -51,7 +57,8 @@ class ConversationSummary(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = Column(String, unique=True, index=True)
     user_id = Column(String, index=True, nullable=True)
-    agent_id = Column(String, index=True)
+    agent_id = Column(String, ForeignKey("agents.id"))
+    organization_id = Column(String, index=True, nullable=True)
     
     # Summary content
     summary = Column(Text)  # LLM-generated summary
@@ -76,6 +83,7 @@ class UserProfile(Base):
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, unique=True, index=True)  # Phone number or user ID
+    organization_id = Column(String, index=True, nullable=True)
     
     # Basic info (populated over time)
     name = Column(String, nullable=True)
@@ -93,6 +101,8 @@ class UserProfile(Base):
     
     # Flags
     is_vip = Column(Float, default=False)
+    # Governance
+    consent_status = Column(String, default="unknown") # unknown, granted, withdrawn
     requires_escalation = Column(Float, default=False)
     
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -114,6 +114,10 @@ export default function SessionMonitoringPage() {
                 setStatus('escalated');
                 setLogs(prev => [{ type: 'alert', content: `ESCALATION: ${data.reason}`, time: new Date() }, ...prev]);
                 break;
+
+            case 'compliance_alert':
+                setLogs(prev => [{ type: 'critical', content: `COMPLIANCE ALERT: Risk Score ${data.risk_score}`, detail: "Real-time violation blocked", time: new Date() }, ...prev]);
+                break;
         }
     };
 
@@ -221,9 +225,9 @@ export default function SessionMonitoringPage() {
                         )}
                         {logs.map((log, i) => (
                             <div key={i} className="group relative pl-4 border-l border-white/10 py-1">
-                                <div className={`absolute -left-[5px] top-2.5 w-2 h-2 rounded-full border border-[#141417] ${log.type === 'alert' ? 'bg-red-500' :
-                                    log.type === 'tool' ? 'bg-purple-500' :
-                                        log.type === 'intent' ? 'bg-yellow-500' : 'bg-blue-500'
+                                <div className={`absolute -left-[5px] top-2.5 w-2 h-2 rounded-full border border-[#141417] ${log.type === 'alert' || log.type === 'critical' ? 'bg-red-500' :
+                                        log.type === 'tool' ? 'bg-purple-500' :
+                                            log.type === 'intent' ? 'bg-yellow-500' : 'bg-blue-500'
                                     }`} />
                                 <div className="text-[10px] text-gray-500 mb-0.5">
                                     {new Date(log.time).toLocaleTimeString()}

@@ -13,6 +13,7 @@ import json
 
 from app.models.memory import MemoryItem, ConversationSummary, UserProfile
 from app.services.compliance_service import redactor
+from datetime import timedelta
 
 
 class MemoryService:
@@ -50,9 +51,13 @@ class MemoryService:
         category: str,
         key: str,
         value: str,
+        memory_type: str = "user_claim",
         agent_id: str = None,
         session_id: str = None,
-        confidence: float = 1.0
+        confidence: float = 1.0,
+        ttl_seconds: int = None,
+        is_sensitive: bool = False,
+        organization_id: str = None
     ) -> MemoryItem:
         """
         Store a memory fact. Updates existing memory if key exists.
@@ -60,31 +65,43 @@ class MemoryService:
         # Check if memory exists
         existing = self.db.query(MemoryItem).filter(
             MemoryItem.user_id == user_id,
-            MemoryItem.key == key
+            MemoryItem.key == key,
+            MemoryItem.organization_id == organization_id
         ).first()
         
         if existing:
             # Update existing memory
-            existing.value = value
+            # Mandatory PII masking at storage layer for sensitive fields
+            final_value = redactor.redact_text(value) if is_sensitive else value
+            
+            existing.value = final_value
+            existing.memory_type = memory_type
             existing.confidence = max(existing.confidence, confidence)
             existing.updated_at = datetime.utcnow()
-            existing.embedding = self._generate_embedding(f"{category}: {key} = {value}")
+            existing.embedding = self._generate_embedding(f"[{memory_type}] {category}: {key} = {value}")
             self.db.commit()
-            logger.info(f"Updated memory for user {user_id}: {key}")
+            logger.info(f"Updated memory [{memory_type}] for user {user_id}: {key}")
             return existing
         
         # Create new memory
-        embedding = self._generate_embedding(f"{category}: {key} = {value}")
+        embedding = self._generate_embedding(f"[{memory_type}] {category}: {key} = {value}")
+        
+        # Mandatory PII masking at storage layer for sensitive fields
+        final_value = redactor.redact_text(value) if is_sensitive else value
         
         memory = MemoryItem(
             user_id=user_id,
+            organization_id=organization_id,
             agent_id=agent_id,
             category=category,
+            memory_type=memory_type,
             key=key,
-            value=value,
+            value=final_value,
             source_session_id=session_id,
             confidence=confidence,
-            embedding=embedding
+            embedding=embedding,
+            expires_at=datetime.utcnow() + timedelta(seconds=ttl_seconds) if ttl_seconds else None,
+            is_sensitive=is_sensitive
         )
         
         self.db.add(memory)
@@ -98,7 +115,8 @@ class MemoryService:
         conversation: List[Dict[str, str]],
         agent_id: str = None,
         session_id: str = None,
-        llm_service = None
+        llm_service = None,
+        organization_id: str = None
     ) -> List[MemoryItem]:
         """
         Extract and store memories from a conversation using LLM.
@@ -107,17 +125,32 @@ class MemoryService:
             logger.warning("No LLM service provided for memory extraction")
             return []
         
+        # 1. Check for "Do Not Remember" signal
+        conv_text_full = "\n".join([m['content'].lower() for m in conversation])
+        if any(trigger in conv_text_full for trigger in ["forget this", "don't remember", "do not store", "delete my data"]):
+            logger.info(f"Memory extraction skipped due to user preference for session {session_id}")
+            return []
+
+        # 2. Check for Consent
+        profile = await self.get_or_create_profile(user_id)
+        if profile.consent_status == "withdrawn":
+            logger.warning(f"Memory extraction skipped: User {user_id} has withdrawn consent")
+            return []
+
         # Build extraction prompt with PII Redaction
         conv_text = "\n".join([f"{m['role']}: {redactor.redact_text(m['content'])}" for m in conversation])
         
         extraction_prompt = f"""Analyze this conversation and extract key facts about the user.
 Return a JSON array of memory items to store. Each item should have:
 - category: one of [personal_info, preferences, history, feedback, needs]
+- type: one of [user_claim, system_verified, regulated_fact]
 - key: specific attribute (e.g., "name", "favorite_product", "complaint_topic")
 - value: the extracted value
 - confidence: 0.0-1.0 how certain you are
+- is_sensitive: true/false if this contains PII or private data
+- ttl_seconds: optional integer for how long this should be remembered (e.g. 3600 for 1 hour)
 
-Only extract explicit facts mentioned by the user, not inferences.
+Note: Most facts from conversation are 'user_claim' unless explicitly confirmed by the agent or a system tool.
 
 Conversation:
 {conv_text}
@@ -141,9 +174,12 @@ Return ONLY valid JSON array, no other text:"""
                     category=item.get("category", "general"),
                     key=item["key"],
                     value=item["value"],
+                    memory_type=item.get("type", "user_claim"),
                     agent_id=agent_id,
                     session_id=session_id,
-                    confidence=item.get("confidence", 0.8)
+                    ttl_seconds=item.get("ttl_seconds"),
+                    is_sensitive=item.get("is_sensitive", False),
+                    organization_id=organization_id
                 )
                 memories.append(memory)
             
@@ -158,10 +194,10 @@ Return ONLY valid JSON array, no other text:"""
     async def retrieve(
         self,
         query: str,
-        user_id: str = None,
         category: str = None,
         limit: int = 10,
-        min_confidence: float = 0.5
+        min_confidence: float = 0.5,
+        organization_id: str = None
     ) -> List[Dict[str, Any]]:
         """
         Semantic search across memories.
@@ -174,9 +210,14 @@ Return ONLY valid JSON array, no other text:"""
             MemoryItem.embedding.cosine_distance(query_embedding).label('distance')
         )
         
-        filters = [MemoryItem.confidence >= min_confidence]
+        filters = [
+            MemoryItem.confidence >= min_confidence,
+            or_(MemoryItem.expires_at == None, MemoryItem.expires_at > datetime.utcnow())
+        ]
         if user_id:
             filters.append(MemoryItem.user_id == user_id)
+        if organization_id:
+            filters.append(MemoryItem.organization_id == organization_id)
         if category:
             filters.append(MemoryItem.category == category)
         
@@ -194,10 +235,12 @@ Return ONLY valid JSON array, no other text:"""
             memories.append({
                 "id": memory.id,
                 "category": memory.category,
+                "type": memory.memory_type,
                 "key": memory.key,
                 "value": memory.value,
                 "confidence": memory.confidence,
                 "relevance": 1 - distance,  # Convert distance to similarity
+                "is_sensitive": memory.is_sensitive,
                 "last_updated": memory.updated_at.isoformat() if memory.updated_at else None
             })
         
@@ -207,12 +250,15 @@ Return ONLY valid JSON array, no other text:"""
     async def get_user_memories(
         self,
         user_id: str,
-        categories: List[str] = None
+        categories: List[str] = None,
+        organization_id: str = None
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Get all memories for a user, grouped by category.
         """
         query = self.db.query(MemoryItem).filter(MemoryItem.user_id == user_id)
+        if organization_id:
+            query = query.filter(MemoryItem.organization_id == organization_id)
         
         if categories:
             query = query.filter(MemoryItem.category.in_(categories))
@@ -226,13 +272,14 @@ Return ONLY valid JSON array, no other text:"""
             result[memory.category].append({
                 "key": memory.key,
                 "value": memory.value,
+                "type": memory.memory_type,
                 "confidence": memory.confidence,
                 "updated_at": memory.updated_at.isoformat() if memory.updated_at else None
             })
         
         return result
     
-    async def get_context_for_call(self, user_id: str) -> str:
+    async def get_context_for_call(self, user_id: str, organization_id: str = None) -> str:
         """
         Build a context string for an agent about a user.
         Called at the start of a conversation to provide history.
@@ -241,7 +288,7 @@ Return ONLY valid JSON array, no other text:"""
         profile = self.db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
         
         # Get recent memories
-        memories = await self.get_user_memories(user_id)
+        memories = await self.get_user_memories(user_id, organization_id=organization_id)
         
         # Get last conversation summary
         last_summary = self.db.query(ConversationSummary).filter(
@@ -262,8 +309,9 @@ Return ONLY valid JSON array, no other text:"""
             context_parts.append("\n**Known facts about this caller:**")
             for category, items in memories.items():
                 context_parts.append(f"- {category}:")
-                for item in items[:3]:  # Limit per category
-                    context_parts.append(f"  - {item['key']}: {item['value']}")
+                for item in items[:5]:  # Limit per category
+                    type_icon = "[✓]" if item['type'] in ['system_verified', 'regulated_fact'] else "[?]"
+                    context_parts.append(f"  {type_icon} {item['key']}: {item['value']} ({item['type']})")
         
         if last_summary:
             context_parts.append(f"\n**Last conversation ({last_summary.created_at.strftime('%Y-%m-%d')}):**")
@@ -282,7 +330,8 @@ Return ONLY valid JSON array, no other text:"""
         agent_id: str,
         conversation: List[Dict[str, str]],
         outcome: str = None,
-        llm_service = None
+        llm_service = None,
+        organization_id: str = None
     ) -> ConversationSummary:
         """
         Generate and store a summary of a conversation.
@@ -334,6 +383,7 @@ KEY POINTS:
             key_points=key_points,
             turn_count=len(conversation),
             outcome=outcome,
+            organization_id=organization_id,
             embedding=embedding
         )
         
@@ -377,6 +427,13 @@ KEY POINTS:
             self.db.commit()
         
         return profile
+
+    async def set_user_consent(self, user_id: str, status: str):
+        """Set or update user consent status."""
+        profile = await self.get_or_create_profile(user_id)
+        profile.consent_status = status
+        self.db.commit()
+        logger.info(f"Consent for user {user_id} updated to: {status}")
 
 
 # Singleton-ish factory function

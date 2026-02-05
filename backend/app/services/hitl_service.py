@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from app.models.hitl import PendingAction, ApprovalStatus
+from app.models.hitl import PendingAction, ApprovalStatus, SessionIntervention, InterventionMode
 
 class HITLService:
     def __init__(self, db: Session):
@@ -56,3 +56,50 @@ class HITLService:
         self.db.commit()
         self.db.refresh(action)
         return action
+
+    async def start_intervention(
+        self, 
+        session_id: str, 
+        user_id: str, 
+        mode: str = InterventionMode.HUMAN_TAKEOVER.value
+    ) -> SessionIntervention:
+        """Initiate a human takeover or whisper mode for a session."""
+        intervention = self.db.query(SessionIntervention).filter(
+            SessionIntervention.session_id == session_id
+        ).first()
+        
+        if intervention:
+            intervention.mode = mode
+            intervention.is_active = True
+            intervention.user_id = user_id
+        else:
+            intervention = SessionIntervention(
+                session_id=session_id,
+                user_id=user_id,
+                mode=mode,
+                is_active=True
+            )
+            self.db.add(intervention)
+            
+        self.db.commit()
+        self.db.refresh(intervention)
+        return intervention
+
+    async def stop_intervention(self, session_id: str) -> bool:
+        """Deactivate human intervention and return control to AI."""
+        intervention = self.db.query(SessionIntervention).filter(
+            SessionIntervention.session_id == session_id
+        ).first()
+        
+        if intervention:
+            intervention.is_active = False
+            self.db.commit()
+            return True
+        return False
+
+    async def get_intervention_status(self, session_id: str) -> Optional[SessionIntervention]:
+        """Check if a session is currently being intervened by a human."""
+        return self.db.query(SessionIntervention).filter(
+            SessionIntervention.session_id == session_id,
+            SessionIntervention.is_active == True
+        ).first()

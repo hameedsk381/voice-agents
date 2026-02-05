@@ -31,6 +31,7 @@ class Campaign(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     description = Column(String)
+    organization_id = Column(String, index=True, nullable=True) # Multitenancy
     
     # Configuration
     agent_id = Column(String, ForeignKey("agents.id"))

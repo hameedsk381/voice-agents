@@ -40,6 +40,9 @@ class SessionManager:
     
     def _active_sessions_key(self) -> str:
         return "active_sessions_global"
+        
+    def _human_channel_key(self, session_id: str) -> str:
+        return f"human_intervention:{session_id}"
     
     async def create_session(
         self, 
@@ -183,6 +186,24 @@ class SessionManager:
                     await self.redis.srem(self._active_sessions_key(), sid)
         
         return active_details
+        
+    async def publish_human_message(self, session_id: str, text: str):
+        """Publish a message from a human agent to the session channel."""
+        await self.connect()
+        message = {
+            "type": "human_response",
+            "text": text,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.redis.publish(self._human_channel_key(session_id), json.dumps(message))
+        logger.info(f"Published human response for session {session_id}")
+
+    async def get_human_message_listener(self, session_id: str) -> redis.client.PubSub:
+        """Get a PubSub listener for human messages on this session."""
+        await self.connect()
+        pubsub = self.redis.pubsub()
+        await pubsub.subscribe(self._human_channel_key(session_id))
+        return pubsub
 
 
 # Singleton instance

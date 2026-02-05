@@ -7,8 +7,9 @@ from .base import LLMProvider
 from app.core.config import settings
 
 class GroqLLM(LLMProvider):
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = "llama-3.3-70b-versatile"):
         self.api_key = api_key or settings.GROQ_API_KEY
+        self.model = model
         if self.api_key:
             self.client = AsyncGroq(api_key=self.api_key)
         else:
@@ -21,7 +22,7 @@ class GroqLLM(LLMProvider):
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         
         kwargs = {
-            "model": "llama-3.3-70b-versatile",
+            "model": self.model,
             "messages": messages,
             "temperature": 0.7,
         }
@@ -49,7 +50,7 @@ class GroqLLM(LLMProvider):
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         
         kwargs = {
-            "model": "llama-3.3-70b-versatile",  # Best for tool use
+            "model": self.model,  # Best for tool use
             "messages": messages,
             "temperature": 0.3,  # Lower temp for tool calling accuracy
         }
@@ -83,7 +84,7 @@ class GroqLLM(LLMProvider):
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         
         stream = await self.client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=self.model,
             messages=messages,
             stream=True,
             temperature=0.7,

@@ -37,6 +37,14 @@ async def get_agent_analytics(
     service = AnalyticsService(db)
     return await service.get_agent_performance()
 
+@router.get("/shadow-stats")
+async def get_shadow_stats(
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db)
+):
+    service = AnalyticsService(db)
+    return await service.get_shadow_stats()
+
 @router.get("/")
 async def get_logs(
     skip: int = 0,

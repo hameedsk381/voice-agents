@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
+
 from app.core.config import settings
 from loguru import logger
 import json
@@ -30,10 +30,10 @@ class LangGraphOrchestrator:
                 temperature=0.2
             )
         else:
-            self.llm = ChatOpenAI(
-                openai_api_key=settings.OPENAI_API_KEY,
-                model="gpt-4o-mini",
-                temperature=0.2
+            logger.error("No GROQ_API_KEY found. LangGraph requires Groq.")
+            self.llm = ChatGroq(
+                groq_api_key=settings.GROQ_API_KEY,
+                model_name="llama-3.1-8b-instant"
             )
             
         self.graph = self._build_graph()
