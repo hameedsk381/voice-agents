@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save, Play, Mic, Square, Trash2, Sliders, Activity, History, Shield, Globe, Volume2, Book, FileText, Plus, Search, Bot } from "lucide-react";
+import { ArrowLeft, Save, Play, Mic, Square, Trash2, Sliders, Activity, History, Shield, Globe, Volume2, Book, FileText, Plus, Search, Bot, Phone, PhoneOff, MicOff } from "lucide-react";
 
 interface Agent {
     id: string;
@@ -41,6 +41,12 @@ export default function AgentDetailPage() {
     const [isConnected, setIsConnected] = useState(false);
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [isRecording, setIsRecording] = useState(false);
+    const [isCalling, setIsCalling] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
+    const [agentSpeaking, setAgentSpeaking] = useState(false);
+    // Use 'any' for SpeechRecognition as it is not in standard TS lib
+    const recognitionRef = useRef<any>(null);
+    const isCallingRef = useRef(false);
 
     // Form State
     const [formData, setFormData] = useState<Partial<Agent>>({});
@@ -178,6 +184,9 @@ export default function AgentDetailPage() {
                 // Play audio
                 const audio = new Audio(`data:audio/wav;base64,${data.data}`);
                 audio.play();
+                // Visual feedback
+                setAgentSpeaking(true);
+                audio.onended = () => setAgentSpeaking(false);
             } else if (data.type === "agent_switch") {
                 addMessage("system", `Switched to agent: ${data.to} (${data.reason})`);
             } else if (data.type === "error") {
@@ -212,9 +221,96 @@ export default function AgentDetailPage() {
     const toggleConnection = () => {
         if (isConnected) {
             ws?.close();
+            if (isCalling) stopCall();
         } else {
             connectWebSocket();
         }
+    };
+
+    const startCall = async () => {
+        if (!isConnected) {
+            connectWebSocket();
+        }
+
+        // Feature detection for Web Speech API
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            addMessage("system", "Error: Browser does not support Speech Recognition.");
+            return;
+        }
+
+        try {
+            // 1. Explicitly request mic permission first to clear any blockages
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop()); // Release immediately
+        } catch (err) {
+            console.error("Permission check failed", err);
+            addMessage("system", "Error: Microphone permission denied. Please allow access in your browser settings.");
+            return;
+        }
+
+        try {
+            const recognition = new SpeechRecognition();
+            recognition.lang = agent?.language || 'en-US';
+            recognition.continuous = true;
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                isCallingRef.current = true;
+                setIsCalling(true);
+                addMessage("system", "Voice Call Started (Browser STT). Speak now...");
+            };
+
+            recognition.onresult = (event: any) => {
+                const transcript = event.results[event.results.length - 1][0].transcript;
+                if (transcript.trim()) {
+                    addMessage("user", transcript);
+                    ws?.send(JSON.stringify({
+                        type: "text",
+                        text: transcript
+                    }));
+                }
+            };
+
+            recognition.onerror = (event: any) => {
+                console.error("Speech recognition error", event.error);
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    // Only stop if strictly denied. 'no-speech' is common and ignoreable.
+                    if (isCallingRef.current) {
+                        addMessage("system", `Microphone Error: ${event.error}`);
+                        stopCall();
+                    }
+                }
+            };
+
+            recognition.onend = () => {
+                // Auto-restart if call is still active (keep-alive)
+                if (isCallingRef.current) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        // Ignore if already started
+                    }
+                }
+            };
+
+            recognitionRef.current = recognition;
+            recognition.start();
+        } catch (err) {
+            console.error("Failed to start speech recognition", err);
+            addMessage("system", "Failed to start voice input.");
+        }
+    };
+
+    const stopCall = () => {
+        isCallingRef.current = false;
+        setIsCalling(false);
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+        addMessage("system", "Voice Call Ended.");
     };
 
     if (loading) return <div className="p-8 text-white">Loading agent...</div>;
@@ -448,28 +544,70 @@ export default function AgentDetailPage() {
                                     </button>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                    {chatHistory.length === 0 && (
-                                        <div className="flex flex-col items-center justify-center h-full text-gray-600 space-y-2">
-                                            <Bot className="w-10 h-10 opacity-20" />
-                                            <p className="text-sm">Start the conversation to test the agent</p>
-                                        </div>
-                                    )}
-                                    {chatHistory.map((msg, i) => (
-                                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${msg.role === 'user'
-                                                ? 'bg-blue-600 text-white'
-                                                : msg.role === 'system'
-                                                    ? 'bg-gray-800 text-gray-400 italic font-mono text-xs border border-white/5'
-                                                    : 'bg-white/10 text-gray-200'
-                                                }`}>
-                                                {msg.content}
+                                {isCalling ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500">
+                                        <div className="relative">
+                                            <div className={`absolute -inset-4 bg-blue-500/20 rounded-full blur-xl transition-all duration-700 ${agentSpeaking ? 'scale-150 opacity-100' : 'scale-100 opacity-50'}`} />
+                                            <div className={`relative w-32 h-32 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${agentSpeaking ? 'border-blue-400 bg-blue-400/10 shadow-[0_0_30px_rgba(59,130,246,0.5)]' : 'border-white/10 bg-white/5'}`}>
+                                                <Bot className={`w-16 h-16 transition-all duration-300 ${agentSpeaking ? 'text-blue-400 scale-110' : 'text-gray-500'}`} />
                                             </div>
+                                            {agentSpeaking && (
+                                                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                                                    {[1, 2, 3, 4, 5].map(i => (
+                                                        <div key={i} className="w-1 bg-blue-400 rounded-full animate-bounce" style={{ height: `${8 + Math.random() * 12}px`, animationDelay: `${i * 0.1}s` }} />
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    ))}
-                                </div>
+                                        <div className="text-center space-y-2">
+                                            <h3 className="text-xl font-bold text-white">{agentSpeaking ? "Agent is speaking..." : "Listening..."}</h3>
+                                            <p className="text-sm text-gray-500">Voice call active · Secure Channel</p>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <button onClick={() => setIsMuted(!isMuted)} className={`p-4 rounded-full border transition-all ${isMuted ? 'bg-red-500/10 border-red-500/50 text-red-500' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}>
+                                                {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                                            </button>
+                                            <button onClick={stopCall} className="p-4 rounded-full bg-red-600 text-white hover:bg-red-500 transition-all shadow-lg shadow-red-600/20">
+                                                <PhoneOff className="w-6 h-6" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                        {chatHistory.length === 0 && (
+                                            <div className="flex flex-col items-center justify-center h-full text-gray-600 space-y-2">
+                                                <Bot className="w-10 h-10 opacity-20" />
+                                                <p className="text-sm">Start the conversation to test the agent</p>
+                                            </div>
+                                        )}
+                                        {chatHistory.map((msg, i) => (
+                                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${msg.role === 'user'
+                                                    ? 'bg-blue-600 text-white'
+                                                    : msg.role === 'system'
+                                                        ? 'bg-gray-800 text-gray-400 italic font-mono text-xs border border-white/5'
+                                                        : 'bg-white/10 text-gray-200'
+                                                    }`}>
+                                                    {msg.content}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
 
                                 <div className="p-4 border-t border-white/10 bg-black/20">
+                                    <div className="flex gap-2 items-center mb-4 px-2">
+                                        <div className="flex-1 h-px bg-white/5" />
+                                        <button
+                                            onClick={isCalling ? stopCall : startCall}
+                                            disabled={!isConnected}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${isCalling ? 'bg-red-600 text-white animate-pulse' : 'bg-green-600/10 text-green-400 border border-green-500/20 hover:bg-green-600/20'}`}
+                                        >
+                                            {isCalling ? <PhoneOff className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
+                                            {isCalling ? "End Voice Call" : "Start Voice Call"}
+                                        </button>
+                                        <div className="flex-1 h-px bg-white/5" />
+                                    </div>
                                     <form onSubmit={sendMessage} className="flex gap-2">
                                         <input
                                             value={input}
@@ -626,8 +764,8 @@ export default function AgentDetailPage() {
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }
 
