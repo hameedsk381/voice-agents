@@ -5,12 +5,17 @@ import os
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
 from loguru import logger
+from app.core.config import settings
 
 class TelephonyService:
     def __init__(self):
-        self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-        self.client = Client(self.account_sid, self.auth_token) if self.account_sid else None
+        self.account_sid = settings.TWILIO_ACCOUNT_SID or os.getenv("TWILIO_ACCOUNT_SID")
+        self.auth_token = settings.TWILIO_AUTH_TOKEN or os.getenv("TWILIO_AUTH_TOKEN")
+        self.client = (
+            Client(self.account_sid, self.auth_token)
+            if self.account_sid and self.auth_token
+            else None
+        )
         
     def generate_twiml_stream(self, stream_url: str, welcome_message: str = None) -> str:
         """Generate TwiML to connect a call to a media stream."""

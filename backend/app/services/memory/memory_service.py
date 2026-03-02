@@ -194,6 +194,7 @@ Return ONLY valid JSON array, no other text:"""
     async def retrieve(
         self,
         query: str,
+        user_id: str = None,
         category: str = None,
         limit: int = 10,
         min_confidence: float = 0.5,

@@ -6,6 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, Save, Users, Settings, Phone, Upload, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 export default function NewCampaignPage() {
     const router = useRouter();
     const { token } = useAuth();
@@ -22,7 +24,7 @@ export default function NewCampaignPage() {
     useEffect(() => {
         const fetchAgents = async () => {
             try {
-                const res = await fetch('http://localhost:8001/api/v1/agents/', {
+                const res = await fetch(`${API_URL}/agents/`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -43,7 +45,7 @@ export default function NewCampaignPage() {
         setError(null);
 
         try {
-            const res = await fetch('http://localhost:8001/api/v1/campaigns/', {
+            const res = await fetch(`${API_URL}/campaigns/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

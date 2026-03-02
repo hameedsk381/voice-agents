@@ -8,6 +8,9 @@ import {
     ArrowLeft, Activity, Box, Terminal, ChevronRight
 } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8001';
+
 interface Event {
     type: string;
     data: any;
@@ -45,7 +48,7 @@ export default function SessionMonitoringPage() {
         // Fetch initial state
         const fetchInitial = async () => {
             try {
-                const res = await fetch(`http://localhost:8001/api/v1/monitoring/session/${session_id}`, {
+                const res = await fetch(`${API_URL}/monitoring/session/${session_id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -62,7 +65,7 @@ export default function SessionMonitoringPage() {
         fetchInitial();
 
         // Connect WebSocket
-        const ws = new WebSocket(`ws://localhost:8001/api/v1/monitoring/stream/${session_id}`);
+        const ws = new WebSocket(`${WS_URL}/api/v1/monitoring/stream/${session_id}`);
         wsRef.current = ws;
 
         ws.onopen = () => setIsConnected(true);

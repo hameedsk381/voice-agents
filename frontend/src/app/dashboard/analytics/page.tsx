@@ -11,6 +11,8 @@ import {
     CheckCircle2, AlertCircle, PhoneIncoming, BarChart3
 } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 export default function AnalyticsPage() {
     const { token } = useAuth();
     const [overview, setOverview] = useState<any>(null);
@@ -24,9 +26,9 @@ export default function AnalyticsPage() {
                 const headers = { 'Authorization': `Bearer ${token}` };
 
                 const [overviewRes, trendsRes, perfRes] = await Promise.all([
-                    fetch('http://localhost:8001/api/v1/analytics/overview', { headers }),
-                    fetch('http://localhost:8001/api/v1/analytics/daily-trends', { headers }),
-                    fetch('http://localhost:8001/api/v1/analytics/agent-performance', { headers })
+                    fetch(`${API_URL}/analytics/overview`, { headers }),
+                    fetch(`${API_URL}/analytics/daily-trends`, { headers }),
+                    fetch(`${API_URL}/analytics/agent-performance`, { headers })
                 ]);
 
                 if (overviewRes.ok) setOverview(await overviewRes.json());

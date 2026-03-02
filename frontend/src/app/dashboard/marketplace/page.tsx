@@ -9,6 +9,8 @@ import {
     HeartPulse, Globe, Briefcase, Key, Rocket
 } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 interface Template {
     id: string;
     name: string;
@@ -32,7 +34,7 @@ export default function MarketplacePage() {
     useEffect(() => {
         const fetchTemplates = async () => {
             try {
-                const res = await fetch('http://localhost:8001/api/v1/marketplace/templates', {
+                const res = await fetch(`${API_URL}/marketplace/templates`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) setTemplates(await res.json());
@@ -49,7 +51,7 @@ export default function MarketplacePage() {
     const handleInstall = async (id: string) => {
         setInstalling(id);
         try {
-            const res = await fetch(`http://localhost:8001/api/v1/marketplace/install/${id}`, {
+            const res = await fetch(`${API_URL}/marketplace/install/${id}`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });

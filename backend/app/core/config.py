@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     DEEPGRAM_API_KEY: Optional[str] = None
+    ULTRAVOX_API_KEY: Optional[str] = None
+    ULTRAVOX_BASE_URL: str = "https://api.ultravox.ai/api"
+    ULTRAVOX_MODEL: str = "fixie-ai/ultravox-70B"
+    ULTRAVOX_VOICE: str = "Mark"
+    USE_ULTRAVOX_RUNTIME: bool = False
+    ULTRAVOX_INPUT_SAMPLE_RATE: int = 48000
+    ULTRAVOX_OUTPUT_SAMPLE_RATE: int = 48000
+    ULTRAVOX_CLIENT_BUFFER_MS: int = 60
     
     # Telephony
     TWILIO_ACCOUNT_SID: Optional[str] = None

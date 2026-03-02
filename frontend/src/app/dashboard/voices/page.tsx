@@ -5,6 +5,8 @@ import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Play, Mic, Plus, Trash2, Wand2, Loader2, Upload } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
+
 interface Voice {
     id: string;
     name: string;
@@ -130,7 +132,7 @@ function VoiceDesigner({ onBack }: { onBack: () => void }) {
 
             // Use raw fetch for form data if api wrapper doesn't support it
             const token = localStorage.getItem('access_token');
-            const res = await fetch("http://localhost:8001/api/v1/voices/design", {
+            const res = await fetch(`${API_URL}/voices/design`, {
                 method: "POST",
                 headers: token ? { "Authorization": `Bearer ${token}` } : {},
                 body: form
@@ -221,7 +223,7 @@ function VoiceCloner({ onBack }: { onBack: () => void }) {
             form.append("file", file);
 
             const token = localStorage.getItem('access_token');
-            const res = await fetch("http://localhost:8001/api/v1/voices/register", {
+            const res = await fetch(`${API_URL}/voices/register`, {
                 method: "POST",
                 headers: token ? { "Authorization": `Bearer ${token}` } : {},
                 body: form

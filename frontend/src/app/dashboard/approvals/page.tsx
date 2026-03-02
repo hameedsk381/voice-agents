@@ -7,6 +7,8 @@ import {
     CheckCircle, MessageSquare, AlertTriangle, ArrowRight
 } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 interface PendingAction {
     id: string;
     action_type: string;
@@ -25,7 +27,7 @@ export default function ApprovalsPage() {
 
     const fetchActions = async () => {
         try {
-            const res = await fetch('http://localhost:8001/api/v1/hitl/pending', {
+            const res = await fetch(`${API_URL}/hitl/pending`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -44,7 +46,7 @@ export default function ApprovalsPage() {
 
     const handleDecision = async (id: string, decision: 'approved' | 'rejected') => {
         try {
-            const res = await fetch(`http://localhost:8001/api/v1/hitl/${id}/decide`, {
+            const res = await fetch(`${API_URL}/hitl/${id}/decide`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

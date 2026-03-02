@@ -86,7 +86,6 @@ def create_agent_version(
         agent_id=agent_id,
         version_number=version_data.version_number,
         persona=version_data.persona,
-        description=version_data.description,
         tools=version_data.tools,
         policy=version_data.policy,
         success_criteria=version_data.success_criteria,

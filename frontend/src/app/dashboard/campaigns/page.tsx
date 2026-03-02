@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { Plus, ListFilter, Play, Pause, CheckCircle2, AlertCircle, Phone, Users, Calendar } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 interface Campaign {
     id: string;
     name: string;
@@ -23,7 +25,7 @@ export default function CampaignsPage() {
 
     const fetchCampaigns = async () => {
         try {
-            const res = await fetch('http://localhost:8001/api/v1/campaigns/', {
+            const res = await fetch(`${API_URL}/campaigns/`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {

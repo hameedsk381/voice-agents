@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 export default function CampaignDetailsPage() {
     const { id } = useParams();
     const router = useRouter();
@@ -24,7 +26,7 @@ export default function CampaignDetailsPage() {
 
     const fetchDetails = async () => {
         try {
-            const res = await fetch(`http://localhost:8001/api/v1/campaigns/${id}`, {
+            const res = await fetch(`${API_URL}/campaigns/${id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -56,7 +58,7 @@ export default function CampaignDetailsPage() {
         formData.append('file', file);
 
         try {
-            const res = await fetch(`http://localhost:8001/api/v1/campaigns/${id}/upload-csv`, {
+            const res = await fetch(`${API_URL}/campaigns/${id}/upload-csv`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
@@ -77,7 +79,7 @@ export default function CampaignDetailsPage() {
     const handleStartCampaign = async () => {
         setIsStarting(true);
         try {
-            const res = await fetch(`http://localhost:8001/api/v1/campaigns/${id}/start`, {
+            const res = await fetch(`${API_URL}/campaigns/${id}/start`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });

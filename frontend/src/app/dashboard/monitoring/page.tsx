@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { Phone, User, Clock, ShieldAlert, Activity } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
 interface ActiveSession {
     session_id: string;
     agent_id: string;
@@ -23,7 +25,7 @@ export default function MonitoringPage() {
 
     const fetchSessions = async () => {
         try {
-            const response = await fetch('http://localhost:8001/api/v1/monitoring/active-sessions', {
+            const response = await fetch(`${API_URL}/monitoring/active-sessions`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
