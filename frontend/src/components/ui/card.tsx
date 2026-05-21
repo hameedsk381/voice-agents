@@ -1,9 +1,13 @@
 import * as React from "react"
 
-export function Card({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+    glow?: boolean;
+}
+
+export function Card({ className, children, glow = false, ...props }: CardProps) {
     return (
         <div
-            className={`rounded-xl border border-white/10 bg-[#0f0f10] text-gray-100 shadow-sm ${className || ""}`}
+            className={`glass-card p-6 ${glow ? "hover:shadow-[0_0_30px_rgba(0,212,170,0.08)]" : ""} ${className || ""}`}
             {...props}
         >
             {children}
@@ -13,7 +17,7 @@ export function Card({ className, children, ...props }: React.HTMLAttributes<HTM
 
 export function CardHeader({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={`flex flex-col space-y-1.5 p-6 ${className || ""}`} {...props}>
+        <div className={`flex flex-col space-y-1.5 mb-4 ${className || ""}`} {...props}>
             {children}
         </div>
     )
@@ -21,7 +25,7 @@ export function CardHeader({ className, children, ...props }: React.HTMLAttribut
 
 export function CardTitle({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <h3 className={`font-semibold leading-none tracking-tight ${className || ""}`} {...props}>
+        <h3 className={`text-base font-semibold leading-none tracking-tight text-[var(--text-primary)] ${className || ""}`} {...props}>
             {children}
         </h3>
     )
@@ -29,7 +33,7 @@ export function CardTitle({ className, children, ...props }: React.HTMLAttribute
 
 export function CardDescription({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
     return (
-        <p className={`text-sm text-gray-400 ${className || ""}`} {...props}>
+        <p className={`text-xs text-[var(--text-secondary)] ${className || ""}`} {...props}>
             {children}
         </p>
     )
@@ -37,7 +41,7 @@ export function CardDescription({ className, children, ...props }: React.HTMLAtt
 
 export function CardContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={`p-6 pt-0 ${className || ""}`} {...props}>
+        <div className={`text-sm text-[var(--text-secondary)] ${className || ""}`} {...props}>
             {children}
         </div>
     )
@@ -45,7 +49,7 @@ export function CardContent({ className, children, ...props }: React.HTMLAttribu
 
 export function CardFooter({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={`flex items-center p-6 pt-0 ${className || ""}`} {...props}>
+        <div className={`flex items-center pt-4 mt-4 border-t border-[var(--border-subtle)] ${className || ""}`} {...props}>
             {children}
         </div>
     )

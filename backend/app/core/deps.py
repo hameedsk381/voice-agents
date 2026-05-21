@@ -2,7 +2,7 @@
 Authentication dependencies for FastAPI.
 Provides current user injection and role-based access control.
 """
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -16,17 +16,26 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=F
 
 
 async def get_current_user(
+    request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(database.get_db)
 ) -> Optional[User]:
     """
     Get the current authenticated user from the JWT token.
+    Extracts from request cookie first, falling back to Authorization header.
     Returns None if no valid token is provided.
     """
-    if not token:
+    # 1. Try cookie first
+    jwt_token = request.cookies.get("access_token")
+    
+    # 2. Fall back to oauth2_scheme (header token)
+    if not jwt_token:
+        jwt_token = token
+        
+    if not jwt_token:
         return None
     
-    token_data = decode_token(token)
+    token_data = decode_token(jwt_token)
     if not token_data:
         return None
     

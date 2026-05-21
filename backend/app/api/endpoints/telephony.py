@@ -11,7 +11,12 @@ from starlette.websockets import WebSocketState
 from twilio.twiml.voice_response import VoiceResponse
 from loguru import logger
 
-from app.api.endpoints.orchestrator import execute_tool, _run_ultravox_compliance_audit
+from app.orchestration.tool_executor import execute_tool
+from app.orchestration.ultravox_twilio import (
+    ULTRAVOX_DATA_CONNECTION_CONTEXT,
+    create_ultravox_twilio_call,
+)
+from app.orchestration.websocket_proxy import _run_ultravox_compliance_audit
 from app.core import database
 from app.core.config import settings
 from app.models import agent as models
@@ -29,12 +34,9 @@ import uuid
 router = APIRouter()
 ultravox_service = UltravoxService()
 
-# Ephemeral per-call context used by Ultravox data connection websocket callbacks.
-_ULTRAVOX_DATA_CONNECTION_CONTEXT: Dict[str, Dict[str, Any]] = {}
-
-
 def _use_ultravox_runtime() -> bool:
-    return settings.USE_ULTRAVOX_RUNTIME and ultravox_service.enabled
+    from app.orchestration.websocket_proxy import is_ultravox_runtime
+    return is_ultravox_runtime()
 
 
 def _server_host() -> str:
@@ -174,116 +176,6 @@ def _resolve_active_agent_configuration(db: Session, agent: models.Agent) -> Dic
     return {"persona": active_persona, "tools": active_tools}
 
 
-def _build_data_connection_url(token: str) -> str:
-    query = urlencode({"token": token})
-    return f"{_ws_base_url()}/api/v1/telephony/ultravox-data?{query}"
-
-
-async def _create_ultravox_twilio_call(
-    db: Session,
-    agent: models.Agent,
-    call_direction: str,
-    caller_id: Optional[str],
-    called_number: Optional[str],
-    twilio_call_sid: Optional[str],
-    outgoing_to: Optional[str] = None,
-    outgoing_from: Optional[str] = None,
-) -> Dict[str, Any]:
-    active_config = _resolve_active_agent_configuration(db, agent)
-    session_language = agent.language or "en-US"
-    token = str(uuid.uuid4())
-    org_id = agent.organization_id
-
-    metadata: Dict[str, str] = {
-        "agent_id": str(agent.id),
-        "org_id": str(org_id) if org_id is not None else "",
-        "channel": "twilio",
-        "direction": call_direction,
-    }
-    if caller_id:
-        metadata["caller_id"] = str(caller_id)
-    if called_number:
-        metadata["called_number"] = str(called_number)
-    if twilio_call_sid:
-        metadata["twilio_call_sid"] = str(twilio_call_sid)
-
-    call_payload: Dict[str, Any] = {
-        "systemPrompt": f"{active_config['persona']}\n\nIMPORTANT: Respond only in {session_language}.",
-        "model": settings.ULTRAVOX_MODEL,
-        "voice": settings.ULTRAVOX_VOICE,
-        "languageHint": session_language,
-        "selectedTools": _build_ultravox_selected_tools(active_config["tools"], implementation="dataConnection"),
-        "metadata": metadata,
-        "initialState": {
-            "agent_id": str(agent.id),
-            "organization_id": str(org_id) if org_id is not None else "",
-            "direction": call_direction,
-        },
-        "medium": {"twilio": {}},
-        "dataConnection": {
-            "websocketUrl": _build_data_connection_url(token),
-            "dataMessages": {
-                "callStarted": True,
-                "transcript": True,
-                "state": True,
-                "dataConnectionToolInvocation": True,
-                "callEvent": True,
-            },
-        },
-    }
-
-    if outgoing_to and outgoing_from:
-        call_payload["medium"]["twilio"]["outgoing"] = {
-            "to": outgoing_to,
-            "from": outgoing_from,
-        }
-
-    _ULTRAVOX_DATA_CONNECTION_CONTEXT[token] = {
-        "token": token,
-        "agent_id": agent.id,
-        "organization_id": org_id,
-        "caller_id": caller_id,
-        "called_number": called_number,
-        "twilio_call_sid": twilio_call_sid,
-        "direction": call_direction,
-    }
-
-    try:
-        call = await ultravox_service.create_call(call_payload)
-    except Exception:
-        _ULTRAVOX_DATA_CONNECTION_CONTEXT.pop(token, None)
-        raise
-
-    session_id = call.get("callId") or str(uuid.uuid4())
-    _ULTRAVOX_DATA_CONNECTION_CONTEXT[token]["session_id"] = session_id
-
-    await session_manager.create_session(
-        session_id=session_id,
-        agent_id=agent.id,
-        caller_id=caller_id,
-        metadata={
-            "channel": "twilio_ultravox",
-            "org_id": org_id,
-            "twilio_call_sid": twilio_call_sid,
-            "called_number": called_number,
-            "direction": call_direction,
-        },
-    )
-    await monitoring_service.broadcast_event(
-        session_id,
-        "session_start",
-        {
-            "agent_id": agent.id,
-            "agent_name": agent.name,
-            "caller_id": caller_id,
-            "provider": "ultravox_twilio",
-            "direction": call_direction,
-        },
-    )
-
-    return {"call": call, "token": token, "session_id": session_id}
-
-
 async def _handle_inbound_voice_webhook(
     request: Request,
     db: Session,
@@ -315,7 +207,7 @@ async def _handle_inbound_voice_webhook(
 
     if _use_ultravox_runtime():
         try:
-            created = await _create_ultravox_twilio_call(
+            created = await create_ultravox_twilio_call(
                 db=db,
                 agent=agent,
                 call_direction="inbound",
@@ -372,11 +264,11 @@ async def ultravox_data_connection(
     await websocket.accept()
 
     token = websocket.query_params.get("token")
-    if not token or token not in _ULTRAVOX_DATA_CONNECTION_CONTEXT:
+    if not token or token not in ULTRAVOX_DATA_CONNECTION_CONTEXT:
         await websocket.close(code=1008, reason="Invalid data connection token")
         return
 
-    context = _ULTRAVOX_DATA_CONNECTION_CONTEXT[token]
+    context = ULTRAVOX_DATA_CONNECTION_CONTEXT[token]
     session_id = context.get("session_id")
     agent_id = context.get("agent_id")
     org_id = context.get("organization_id")
@@ -576,7 +468,7 @@ async def ultravox_data_connection(
             except Exception as end_error:
                 logger.error(f"Failed to end telephony session {session_id}: {end_error}")
 
-        _ULTRAVOX_DATA_CONNECTION_CONTEXT.pop(token, None)
+        ULTRAVOX_DATA_CONNECTION_CONTEXT.pop(token, None)
 
         if websocket.client_state != WebSocketState.DISCONNECTED:
             await websocket.close()
@@ -647,7 +539,7 @@ async def make_outbound_call(
             }
 
         try:
-            created = await _create_ultravox_twilio_call(
+            created = await create_ultravox_twilio_call(
                 db=db,
                 agent=agent,
                 call_direction="outbound",

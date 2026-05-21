@@ -151,31 +151,93 @@ class AgentOrchestrator:
         return None
     
     def analyze_sentiment(self, text: str) -> float:
-        """Analyze sentiment of user message (Simple Keyword based for now)."""
-        text_lower = text.lower()
-        positive_words = ["thank", "good", "great", "excellent", "happy", "yes", "correct", "perfect"]
-        negative_words = ["bad", "angry", "frustrated", "wrong", "no", "stop", "terrible", "worst", "unhappy"]
-        
-        pos_score = sum(1 for w in positive_words if w in text_lower)
-        neg_score = sum(1 for w in negative_words if w in text_lower)
-        
-        if pos_score > neg_score: return 1.0
-        if neg_score > pos_score: return 0.0
-        return 0.5 # Neutral
+        """
+        Analyze sentiment of user message using an extensible, negation-aware
+        scoring engine. Handles phrase boundaries and word-level negations.
+        """
+        text_lower = text.lower().strip()
+        if not text_lower:
+            return 0.5
 
-    def should_escalate(self, context: AgentContext, response: str, agent: Agent) -> tuple[bool, Optional[str]]:
+        # Negation words that flip the sentiment of the subsequent word
+        negations = {"not", "no", "never", "none", "without", "n't"}
+        
+        positive_words = {"thank", "good", "great", "excellent", "happy", "yes", "correct", "perfect", "love", "awesome", "wonderful", "satisfied", "fine"}
+        negative_words = {"bad", "angry", "frustrated", "wrong", "no", "stop", "terrible", "worst", "unhappy", "broke", "fail", "hate", "dissatisfied", "error"}
+
+        words = [w.strip(".,?!;:") for w in text_lower.split()]
+        words = [w for w in words if w]
+
+        pos_score = 0
+        neg_score = 0
+
+        for i, word in enumerate(words):
+            is_pos = word in positive_words
+            is_neg = word in negative_words
+
+            if is_pos or is_neg:
+                # Check for negation in the preceding 2 words
+                is_negated = False
+                start = max(0, i - 2)
+                for j in range(start, i):
+                    if words[j] in negations or words[j].endswith("n't"):
+                        is_negated = True
+                        break
+                
+                if is_pos:
+                    if is_negated:
+                        neg_score += 1.2  # "not good" -> negative
+                    else:
+                        pos_score += 1.0
+                elif is_neg:
+                    if is_negated:
+                        pos_score += 1.0  # "not bad" -> positive
+                    else:
+                        neg_score += 1.2
+
+        if pos_score > neg_score:
+            diff = pos_score - neg_score
+            return min(1.0, 0.5 + (diff * 0.25))
+        elif neg_score > pos_score:
+            diff = neg_score - pos_score
+            return max(0.0, 0.5 - (diff * 0.25))
+        
+        return 0.5
+
+    async def should_escalate(
+        self, context: AgentContext, response: str, agent: Agent,
+        llm_service=None
+    ) -> tuple[bool, Optional[str]]:
         """
         Determine if the current context requires escalation.
+        Uses LLM-based semantic evaluation when available for failure conditions
+        and success criteria. Falls back to keyword matching if no LLM provided.
         Returns (should_escalate, reason).
         """
         # 1. Check Agent-Specific Failure Conditions (Elite Feature)
         failure_conditions = agent.failure_conditions or []
         last_user_msg = context.history[-1]["content"].lower() if context.history else ""
         
-        for condition in failure_conditions:
-            # Simple keyword matching for now, can be expanded to LLM-based check
-            if condition.lower() in last_user_msg:
-                return True, f"Failure Condition Triggered: {condition}"
+        if failure_conditions and llm_service:
+            semantic_prompt = f"""
+            You are a safety monitor. Determine if the user's message violates any failure condition.
+            
+            Failure Conditions:
+            {chr(10).join(f'- {c}' for c in failure_conditions)}
+            
+            User Message: "{last_user_msg}"
+            
+            Does this message match ANY failure condition semantically? Reply with YES or NO only.
+            """
+            eval_result = await llm_service.generate_response(
+                "Evaluate failure conditions.", semantic_prompt, []
+            )
+            if eval_result and eval_result.strip().upper().startswith("YES"):
+                return True, f"Failure Condition Triggered (semantic): {failure_conditions[0]}"
+        elif failure_conditions:
+            for condition in failure_conditions:
+                if condition.lower() in last_user_msg:
+                    return True, f"Failure Condition Triggered: {condition}"
 
         # 2. Check Global Sentiment Slope
         if context.sentiment_slope < 0.3:
@@ -191,14 +253,30 @@ class AgentOrchestrator:
             if keyword in last_user_msg:
                 return True, f"User requested: {keyword}"
         
-        # 4. Success Check (Exit if primary goal reached)
+        # 4. Success Check (Exit if primary goal reached) - Semantic LLM evaluation
         success_criteria = agent.success_criteria or []
-        for criteria in success_criteria:
-            if criteria.lower() in response.lower():
-                # Note: This might lead to "SUCCESS" instead of typical human escalation
-                # For now, we follow the 'exit_actions' if defined
+        if success_criteria and llm_service:
+            semantic_prompt = f"""
+            You are a goal verifier. Determine if the assistant's response achieves any success criteria.
+            
+            Success Criteria:
+            {chr(10).join(f'- {c}' for c in success_criteria)}
+            
+            Assistant Response: "{response}"
+            
+            Does this response satisfy ANY success criteria semantically? Reply with YES or NO only.
+            """
+            eval_result = await llm_service.generate_response(
+                "Evaluate success criteria.", semantic_prompt, []
+            )
+            if eval_result and eval_result.strip().upper().startswith("YES"):
                 if "escalate" in (agent.exit_actions or []):
-                    return True, f"Goal Reached: {criteria}. Handing off for finalization."
+                    return True, f"Goal Reached (semantic). Handing off for finalization."
+        elif success_criteria:
+            for criteria in success_criteria:
+                if criteria.lower() in response.lower():
+                    if "escalate" in (agent.exit_actions or []):
+                        return True, f"Goal Reached: {criteria}. Handing off for finalization."
 
         # 5. Repeated frustration / lack of progress
         if len(context.history) > 6:
@@ -211,6 +289,8 @@ class AgentOrchestrator:
     def handle_low_confidence(self, context: AgentContext) -> Optional[str]:
         """
         Produce a clarification or handoff when pipeline confidence is low.
+        Returns contextual prompts based on which confidence dimension is low,
+        so the user gets a targeted, relevant clarification request.
         """
         conf = context.confidence
         
@@ -221,27 +301,68 @@ class AgentOrchestrator:
             return "I apologize, but I didn't quite catch that over the line. Could you please repeat that more slowly?"
             
         if conf.intent < 0.5:
-            return "I want to make sure I'm helping with the right thing. Could you clarify if you're asking about billing or technical support?"
+            if context.current_intent:
+                return f"I think you may be asking about {context.current_intent}, but I want to be sure. Could you tell me a bit more about what you need?"
+            return "I want to make sure I'm helping with the right thing. Could you clarify if you're asking about billing, technical support, or something else?"
             
         return None
     
-    def detect_intent(self, user_message: str) -> Optional[str]:
-        """Simple intent detection based on keywords."""
-        message_lower = user_message.lower()
+    def detect_intent(self, user_message: str) -> tuple[Optional[str], float]:
+        """
+        Detect intent using an extensible, regex word-boundary based matcher.
+        Returns (intent_name, confidence) where confidence reflects match strength:
+          - 0.95 for strict word-boundary pattern match
+          - 0.0 for no match
+        """
+        import re
+        message_lower = " " + user_message.lower().strip() + " "
         
-        intent_keywords = {
-            "billing": ["bill", "payment", "charge", "invoice", "refund", "money"],
-            "technical": ["error", "not working", "broken", "bug", "issue", "problem"],
-            "sales": ["buy", "purchase", "pricing", "cost", "subscribe", "plan"],
-            "order": ["order", "shipping", "delivery", "tracking", "package"],
-            "account": ["account", "login", "password", "profile", "settings"],
+        intent_patterns = {
+            "billing": [
+                r"\bbill(s|ing)?\b", r"\bpay(ment|s|ing|ed)?\b", r"\bcharge(s|d|ing)?\b",
+                r"\binvoice(s)?\b", r"\brefund(s|ed|ing)?\b", r"\bmoney\b", r"\bcard\b",
+                r"\bcredit\b", r"\bcost\b"
+            ],
+            "technical": [
+                r"\berror(s)?\b", r"\bnot\s+work(ing|s|ed)?\b", r"\bbroken\b", r"\bbug(s)?\b",
+                r"\bissue(s)?\b", r"\bproblem(s)?\b", r"\bcrash(ed|es|ing)?\b", r"\bconnect(ion|s|ed)?\b",
+                r"\bfail(s|ed|ure)?\b", r"\bfreeze\b", r"\bglitch\b"
+            ],
+            "sales": [
+                r"\bbuy\b", r"\bpurchase\b", r"\bpricing\b", r"\bsubscribe\b", r"\bsign\s+up\b",
+                r"\bplan(s)?\b", r"\bquote\b", r"\bdeal(s)?\b"
+            ],
+            "order": [
+                r"\border(s|ed|ing)?\b", r"\bship(ping|ment|ped)?\b", r"\bdeliver(y|ies|ed)?\b",
+                r"\btrack(ing|s|ed)?\b", r"\bpackage(s)?\b", r"\bitem(s)?\b"
+            ],
+            "account": [
+                r"\baccount(s)?\b", r"\blogin\b", r"\blog\s+in\b", r"\bpassword(s)?\b",
+                r"\bprofile\b", r"\bsetting(s)?\b", r"\buser(name|s)?\b", r"\bsign\s+in\b"
+            ]
         }
         
-        for intent, keywords in intent_keywords.items():
-            if any(kw in message_lower for kw in keywords):
-                return intent
+        for intent, patterns in intent_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, message_lower):
+                    logger.info(f"Intent detected: '{intent}' via pattern '{pattern}'")
+                    return intent, 0.95
         
-        return None
+        # Loose keyword check for partial matches
+        intent_loose_keywords = {
+            "billing": ["bill", "pay", "charge", "invoice", "refund", "money", "card", "credit", "cost"],
+            "technical": ["error", "broken", "bug", "issue", "problem", "crash", "fail", "glitch"],
+            "sales": ["buy", "purchase", "pricing", "subscribe", "plan", "quote", "deal"],
+            "order": ["order", "ship", "delivery", "track", "package", "item"],
+            "account": ["account", "login", "password", "profile", "setting", "sign in"]
+        }
+        for intent, keywords in intent_loose_keywords.items():
+            for kw in keywords:
+                if kw in message_lower:
+                    logger.info(f"Intent detected (loose): '{intent}' via keyword '{kw}'")
+                    return intent, 0.6
+        
+        return None, 0.0
     
     async def run_with_fallback(
         self, 
@@ -282,20 +403,22 @@ class AgentOrchestrator:
         """
         Self-Correction / Reflection phase (Peak Agentic Feature).
         Reviews the response against success criteria and constraints.
+        Uses the provided llm_service (caller should pass a fast/cheap model)
+        to minimize latency impact.
         """
-        # 1. Skip if no criteria or simple response
+        # Skip if no criteria or simple response
         if not agent.success_criteria and not agent.failure_conditions:
             return response
             
-        if len(response.split()) < 5: # Too short to reflect on effectively
+        if len(response.split()) < 5:
             return response
 
-        # 2. Build Reflection Prompt
+        # Build Reflection Prompt
         criteria_str = "\n".join([f"- {c}" for c in (agent.success_criteria or [])])
         failures_str = "\n".join([f"- {f}" for f in (agent.failure_conditions or [])])
         
         reflection_prompt = f"""
-        You are an AI Critic. Your job is to verify if the Assistant's response follows the goals and constraints.
+        You are an AI Critic. Verify if the Assistant's response follows the goals and constraints.
         
         User Input: "{user_input}"
         Assistant Response: "{response}"
@@ -306,8 +429,8 @@ class AgentOrchestrator:
         FAILURE CONDITIONS (Avoid these):
         {failures_str}
         
-        Is the response appropriate? If it violates any criteria or failure conditions, provide a CORRECTED version.
-        If it is good, just repeat the original response.
+        If the response is appropriate, repeat it verbatim.
+        If it violates criteria, provide a CORRECTED version.
         
         Return ONLY the final response text.
         """
@@ -316,11 +439,10 @@ class AgentOrchestrator:
         corrected_response = await llm_service.generate_response(
             "Verify this response.", 
             reflection_prompt, 
-            [] # No history for reflection to keep it focused
+            []
         )
         
         if corrected_response and corrected_response.strip() != response.strip():
-            # Check for a "Corrected: " prefix or similar if LLM is chatty, but we asked for ONLY text
             final_text = corrected_response.strip()
             if final_text.lower() != "none" and len(final_text) > 2:
                 logger.info("Self-Correction Triggered: Response improved.")

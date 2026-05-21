@@ -13,7 +13,7 @@ interface User {
 
 interface AuthContextType {
     user: User | null;
-    token: string | null;
+    token: string | null; // Kept for backwards compatibility, always null under HTTP-only cookies
     isLoading: boolean;
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<void>;
@@ -24,67 +24,107 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+import { getApiBaseUrl } from '@/lib/api-url';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(null);
-    const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
-    // Load tokens from localStorage on mount
-    useEffect(() => {
-        const storedToken = localStorage.getItem('access_token');
-        const storedRefresh = localStorage.getItem('refresh_token');
-
-        if (storedToken) {
-            setToken(storedToken);
-            setRefreshTokenValue(storedRefresh);
-            fetchUser(storedToken);
-        } else {
-            setIsLoading(false);
-        }
-    }, []);
-
-    const fetchUser = async (accessToken: string) => {
+    const logout = useCallback(async () => {
         try {
-            const response = await fetch(`${API_URL}/auth/me`, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
+            await fetch(`${getApiBaseUrl()}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (error) {
+            console.error('Failed to logout on server:', error);
+        }
+        setUser(null);
+        router.push('/login');
+    }, [router]);
+
+    const refreshPromiseRef = React.useRef<Promise<boolean> | null>(null);
+
+    const refreshTokenFn = useCallback(async () => {
+        if (refreshPromiseRef.current) {
+            await refreshPromiseRef.current;
+            return;
+        }
+
+        const runRefresh = async () => {
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({}),
+                });
+
+                if (response.ok) {
+                    const meResponse = await fetch(`${getApiBaseUrl()}/auth/me`, {
+                        credentials: 'include',
+                    });
+                    if (meResponse.ok) {
+                        const userData = await meResponse.json();
+                        setUser(userData);
+                        return true;
+                    }
+                }
+                await logout();
+                return false;
+            } catch (error) {
+                console.error('Failed to refresh token:', error);
+                await logout();
+                return false;
+            } finally {
+                refreshPromiseRef.current = null;
+            }
+        };
+
+        refreshPromiseRef.current = runRefresh();
+        await refreshPromiseRef.current;
+    }, [logout]);
+
+    const fetchUser = useCallback(async () => {
+        try {
+            const response = await fetch(`${getApiBaseUrl()}/auth/me`, {
+                credentials: 'include',
             });
 
             if (response.ok) {
                 const userData = await response.json();
                 setUser(userData);
             } else {
-                // Token invalid, try refresh
-                const storedRefresh = localStorage.getItem('refresh_token');
-                if (storedRefresh) {
-                    await refreshTokenFn(storedRefresh);
-                } else {
-                    logout();
-                }
+                // Access token invalid/expired, try refreshing
+                await refreshTokenFn();
             }
         } catch (error) {
             console.error('Failed to fetch user:', error);
-            logout();
+            await logout();
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [refreshTokenFn, logout]);
+
+    // Load active session on mount
+    useEffect(() => {
+        fetchUser();
+    }, [fetchUser]);
 
     const login = async (email: string, password: string) => {
         const formData = new URLSearchParams();
         formData.append('username', email);
         formData.append('password', password);
 
-        const response = await fetch(`${API_URL}/auth/login`, {
+        const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
+            credentials: 'include',
             body: formData,
         });
 
@@ -93,24 +133,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error(error.detail || 'Login failed');
         }
 
-        const data = await response.json();
-
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
-
-        setToken(data.access_token);
-        setRefreshTokenValue(data.refresh_token);
-
-        await fetchUser(data.access_token);
+        await fetchUser();
         router.push('/dashboard');
     };
 
     const register = async (email: string, password: string, fullName?: string) => {
-        const response = await fetch(`${API_URL}/auth/register`, {
+        const response = await fetch(`${getApiBaseUrl()}/auth/register`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
+            credentials: 'include',
             body: JSON.stringify({
                 email,
                 password,
@@ -127,53 +160,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await login(email, password);
     };
 
-    const refreshTokenFn = async (refreshToken: string) => {
-        try {
-            const response = await fetch(`${API_URL}/auth/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ refresh_token: refreshToken }),
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-
-                localStorage.setItem('access_token', data.access_token);
-                localStorage.setItem('refresh_token', data.refresh_token);
-
-                setToken(data.access_token);
-                setRefreshTokenValue(data.refresh_token);
-
-                await fetchUser(data.access_token);
-            } else {
-                logout();
-            }
-        } catch (error) {
-            console.error('Failed to refresh token:', error);
-            logout();
-        }
-    };
-
-    const logout = useCallback(() => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        setToken(null);
-        setRefreshTokenValue(null);
-        setUser(null);
-        router.push('/login');
-    }, [router]);
-
     const value = {
         user,
-        token,
+        token: null, // No longer exposing tokens in JavaScript context for security
         isLoading,
         isAuthenticated: !!user,
         login,
         register,
         logout,
-        refreshToken: () => refreshTokenFn(refreshTokenValue || ''),
+        refreshToken: refreshTokenFn,
     };
 
     return (

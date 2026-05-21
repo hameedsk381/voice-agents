@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchAgents, createAgent } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Bot, MoreVertical } from "lucide-react";
+import { Plus, Bot, MoreVertical, Globe, Settings, ArrowRight } from "lucide-react";
 
 interface Agent {
     id: string;
@@ -19,6 +18,7 @@ export default function AgentsPage() {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         loadAgents();
@@ -37,6 +37,7 @@ export default function AgentsPage() {
 
     const handleCreateAgent = async (e: React.FormEvent) => {
         e.preventDefault();
+        setSubmitting(true);
         const form = e.target as HTMLFormElement;
         const formData = new FormData(form);
 
@@ -56,19 +57,24 @@ export default function AgentsPage() {
             form.reset();
         } catch (err) {
             console.error(err);
+        } finally {
+            setSubmitting(false);
         }
     }
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            {/* Header section */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-white">Agents</h2>
-                    <p className="text-gray-400">Manage and orchestrate your voice workforce.</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                        Voice <span className="text-gradient-brand">Agents</span>
+                    </h2>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">Deploy, monitor, and configure your autonomous voice agent workforce.</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white hover:shadow-lg hover:shadow-[var(--accent-cyan)]/25 transition-all duration-300 flex items-center gap-2"
                 >
                     <Plus className="w-4 h-4" />
                     Create New Agent
@@ -76,89 +82,154 @@ export default function AgentsPage() {
             </div>
 
             {loading ? (
-                <div className="text-white">Loading agents...</div>
+                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="glass-card h-44 animate-pulse" />
+                    ))}
+                </div>
             ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {agents.map((agent) => (
-                        <Link href={`/dashboard/agents/${agent.id}`} key={agent.id}>
-                            <Card className="group relative overflow-hidden transition-all hover:border-blue-500/50 cursor-pointer">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400">
-                                            <Bot className="w-5 h-5" />
+                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                    {agents.map((agent, index) => {
+                        // Different gradient colors based on index for unique look
+                        const gradients = [
+                            "from-[var(--accent-cyan)] to-[var(--accent-blue)]",
+                            "from-[var(--accent-purple)] to-[var(--accent-rose)]",
+                            "from-[var(--accent-blue)] to-[var(--accent-purple)]"
+                        ];
+                        const grad = gradients[index % gradients.length];
+                        
+                        return (
+                            <Link href={`/dashboard/agents/${agent.id}`} key={agent.id} className="group relative block">
+                                <div className="glass-card p-5 group flex flex-col justify-between h-full min-h-[180px] transition-all duration-300 hover:border-white/[0.15] hover:shadow-[0_0_25px_rgba(0,212,170,0.04)] relative">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white shadow-md shadow-black/35`}>
+                                                <Bot className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-bold text-[var(--text-primary)] tracking-tight truncate max-w-[150px]">
+                                                    {agent.name}
+                                                </h3>
+                                                <p className="text-[10px] text-[var(--text-secondary)] mt-0.5 font-medium truncate max-w-[150px]">
+                                                    {agent.role}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <CardTitle className="text-base font-semibold text-white">{agent.name}</CardTitle>
-                                            <p className="text-xs text-gray-500">{agent.role}</p>
-                                        </div>
+                                        <button className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1">
+                                            <MoreVertical className="w-4.5 h-4.5" />
+                                        </button>
                                     </div>
-                                    <button className="text-gray-500 hover:text-white">
-                                        <MoreVertical className="w-5 h-5" />
-                                    </button>
-                                </CardHeader>
-                                <CardContent className="mt-4">
-                                    <p className="text-sm text-gray-400 line-clamp-3 h-[60px]">
+                                    
+                                    <p className="text-xs text-[var(--text-secondary)] mt-4 line-clamp-2 leading-relaxed">
                                         {agent.persona}
                                     </p>
-                                    <div className="mt-4 flex items-center gap-2">
-                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${agent.is_active ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
-                                            {agent.is_active ? 'Active' : 'Inactive'}
-                                        </span>
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/5 text-gray-400 border border-white/10">
-                                            {agent.language}
-                                        </span>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </Link>
-                    ))}
 
-                    {/* Empty State if no agents */}
+                                    <div className="mt-5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
+                                                agent.is_active 
+                                                    ? 'bg-[var(--accent-emerald)]/10 text-[var(--accent-emerald)] border-[var(--accent-emerald)]/20' 
+                                                    : 'bg-[var(--glass-bg)] text-[var(--text-tertiary)] border-[var(--border-subtle)]'
+                                            }`}>
+                                                {agent.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--bg-overlay)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                                                <Globe className="w-2.5 h-2.5" />
+                                                {agent.language}
+                                            </span>
+                                        </div>
+                                        <div className="text-[var(--text-tertiary)] group-hover:text-[var(--text-primary)] transition-all group-hover:translate-x-0.5">
+                                            <ArrowRight className="w-3.5 h-3.5" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </Link>
+                        );
+                    })}
+
+                    {/* Empty State */}
                     {agents.length === 0 && (
-                        <div className="col-span-full py-12 text-center text-gray-500 border border-dashed border-white/10 rounded-xl">
-                            No agents found. Create your first agent to get started.
+                        <div className="col-span-full py-16 text-center text-[var(--text-secondary)] border border-dashed border-[var(--border-default)] rounded-2xl bg-[var(--bg-overlay)]">
+                            <Bot className="w-8 h-8 mx-auto mb-3 text-[var(--text-tertiary)]" />
+                            <p className="text-sm font-semibold">No active agents found</p>
+                            <p className="text-xs text-[var(--text-tertiary)] mt-1">Create your first voice agent to start making outbound calls.</p>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Simple Modal for MVP (Replace with Dialog component later) */}
+            {/* Premium Create Agent Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-md bg-[#0f0f10] border border-white/10 rounded-xl p-6 shadow-2xl">
-                        <h3 className="text-xl font-bold text-white mb-4">Create New Agent</h3>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade">
+                    <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)]" />
+                        
+                        <h3 className="text-base font-bold text-[var(--text-primary)] mb-4">Create Voice Agent</h3>
+                        
                         <form onSubmit={handleCreateAgent} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-1">Name</label>
-                                <input name="name" required className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500" placeholder="e.g. Sales Assistant" />
+                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Agent Name</label>
+                                <input 
+                                    name="name" 
+                                    required 
+                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all" 
+                                    placeholder="e.g. Inbound Sales Assistant" 
+                                />
                             </div>
+                            
                             <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-1">Role</label>
-                                <input name="role" required className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500" placeholder="e.g. Customer Qualification" />
+                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Primary Role</label>
+                                <input 
+                                    name="role" 
+                                    required 
+                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all" 
+                                    placeholder="e.g. Lead Qualification" 
+                                />
                             </div>
+                            
                             <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-1">Language</label>
+                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Language Profile</label>
                                 <select
                                     name="language"
                                     defaultValue="en-US"
-                                    className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500 appearance-none shadow-inner"
+                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-cyan)] transition-all select-none cursor-pointer"
                                 >
-                                    <option value="en-US">English (US)</option>
-                                    <option value="en-GB">English (UK)</option>
-                                    <option value="hi">Hindi (हिन्दी)</option>
-                                    <option value="es">Spanish (Español)</option>
-                                    <option value="fr">French (Français)</option>
-                                    <option value="de">German (Deutsch)</option>
-                                    <option value="pt">Portuguese (Português)</option>
+                                    <option value="en-US" className="bg-[var(--bg-surface)]">English (US)</option>
+                                    <option value="en-GB" className="bg-[var(--bg-surface)]">English (UK)</option>
+                                    <option value="hi" className="bg-[var(--bg-surface)]">Hindi (हिन्दी)</option>
+                                    <option value="es" className="bg-[var(--bg-surface)]">Spanish (Español)</option>
+                                    <option value="fr" className="bg-[var(--bg-surface)]">French (Français)</option>
+                                    <option value="de" className="bg-[var(--bg-surface)]">German (Deutsch)</option>
+                                    <option value="pt" className="bg-[var(--bg-surface)]">Portuguese (Português)</option>
                                 </select>
                             </div>
+                            
                             <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-1">System Prompt (Persona)</label>
-                                <textarea name="persona" required rows={4} className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500" placeholder="You are a helpful..."></textarea>
+                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">System Persona (Instructions)</label>
+                                <textarea 
+                                    name="persona" 
+                                    required 
+                                    rows={4} 
+                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all resize-none" 
+                                    placeholder="Define the behavior constraints and goals of the voice bot..."
+                                />
                             </div>
-                            <div className="flex justify-end gap-3 mt-6">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium">Create Agent</button>
+                            
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--border-subtle)]">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsModalOpen(false)} 
+                                    className="px-4 py-2.5 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={submitting}
+                                    className="px-4 py-2.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2 hover:-translate-y-0.5 active:translate-y-0 active:scale-98"
+                                >
+                                    {submitting ? 'Creating...' : 'Deploy Agent'}
+                                </button>
                             </div>
                         </form>
                     </div>

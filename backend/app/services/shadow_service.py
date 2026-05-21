@@ -67,22 +67,29 @@ class ShadowComparisonService:
                 intersection = set1.intersection(set2)
                 cos_sim = len(intersection) / max(len(set1), len(set2))
             
-            # 3. Log Comparison
-            log = ShadowLog(
-                session_id=session_id,
-                organization_id=organization_id,
-                turn_index=turn_index,
-                primary_model=primary_model_name,
-                shadow_model=self.shadow_llm.model,
-                primary_response=primary_response,
-                shadow_response=shadow_response_text,
-                similarity_score=float(cos_sim),
-                primary_latency_ms=primary_latency,
-                shadow_latency_ms=shadow_duration,
-                intent_match=(cos_sim > 0.85) # Simple heuristic for now
-            )
-            self.db.add(log)
-            self.db.commit()
+            # 3. Log Comparison - Safe and Non-blocking
+            from app.core.database import SessionLocal
+            from fastapi.concurrency import run_in_threadpool
+
+            def save_shadow_log():
+                with SessionLocal() as local_db:
+                    log = ShadowLog(
+                        session_id=session_id,
+                        organization_id=organization_id,
+                        turn_index=turn_index,
+                        primary_model=primary_model_name,
+                        shadow_model=self.shadow_llm.model,
+                        primary_response=primary_response,
+                        shadow_response=shadow_response_text,
+                        similarity_score=float(cos_sim),
+                        primary_latency_ms=primary_latency,
+                        shadow_latency_ms=shadow_duration,
+                        intent_match=(cos_sim > 0.85) # Simple heuristic for now
+                    )
+                    local_db.add(log)
+                    local_db.commit()
+
+            await run_in_threadpool(save_shadow_log)
             
             logger.info(f"Shadow Run [Turn {turn_index}]: Sim={cos_sim:.2f}, LatencyDiff={shadow_duration - primary_latency:.0f}ms")
             

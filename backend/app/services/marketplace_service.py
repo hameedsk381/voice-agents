@@ -13,6 +13,60 @@ class MarketplaceService:
         """Returns pre-built agent templates."""
         return [
             {
+                "id": "tpl_payment_reminder",
+                "name": "Payment Reminder — Outbound",
+                "category": "Outbound Collections",
+                "role": "Accounts Receivable Specialist",
+                "description": "Friendly past-due reminders with payment plans and compliant tone.",
+                "persona": (
+                    "You are {{agentName}} from {{companyName}}, calling {{customerName}} about a past-due balance. "
+                    "Verify identity, state amount clearly, offer payment options, and never pressure or threaten."
+                ),
+                "language": "en-US",
+                "recommended_tools": ["check_account_balance", "schedule_callback", "transfer_to_human"],
+                "goals": ["Secure payment commitment", "Offer workable payment plan"],
+                "success_criteria": ["payment scheduled", "amount confirmed", "plan accepted"],
+                "failure_conditions": ["cease contact", "dispute unresolved", "verification failed"],
+                "popularity": 98,
+                "rating": 4.9
+            },
+            {
+                "id": "tpl_lead_qualification",
+                "name": "Lead Qualification — Outbound",
+                "category": "Outbound Sales",
+                "role": "Sales Development Representative",
+                "description": "Qualifies marketing leads and books demos for your sales team.",
+                "persona": (
+                    "You are {{agentName}} from {{companyName}}, following up with {{customerName}} on product interest. "
+                    "Confirm fit, capture timeline and budget, and book a demo when qualified."
+                ),
+                "language": "en-US",
+                "recommended_tools": ["schedule_callback", "search_knowledge_base", "update_user_profile"],
+                "goals": ["Confirm ICP fit", "Book qualified demo"],
+                "success_criteria": ["demo scheduled", "decision maker identified"],
+                "failure_conditions": ["opt out", "wrong number", "not qualified"],
+                "popularity": 95,
+                "rating": 4.8
+            },
+            {
+                "id": "tpl_appointment_confirm",
+                "name": "Appointment Confirmation — Outbound",
+                "category": "Healthcare & Services",
+                "role": "Scheduling Coordinator",
+                "description": "Confirms upcoming visits, reschedules conflicts, and reduces no-shows.",
+                "persona": (
+                    "You are {{agentName}} from {{companyName}}, calling {{customerName}} to confirm an upcoming appointment. "
+                    "State date, time, and location; offer reschedule; remind what to bring."
+                ),
+                "language": "en-US",
+                "recommended_tools": ["schedule_callback", "search_knowledge_base", "transfer_to_human"],
+                "goals": ["Confirm attendance", "Reschedule if needed"],
+                "success_criteria": ["appointment confirmed", "new slot booked"],
+                "failure_conditions": ["cancelled without rebook", "emergency symptoms"],
+                "popularity": 92,
+                "rating": 4.8
+            },
+            {
                 "id": "tpl_support_pro",
                 "name": "OmniSupport Pro",
                 "category": "Customer Support",
@@ -24,23 +78,8 @@ class MarketplaceService:
                 "goals": ["Resolve user inquiry", "Maintain high empathy score"],
                 "success_criteria": ["thank you", "resolved", "problem fixed"],
                 "failure_conditions": ["not happy", "angry", "manager"],
-                "popularity": 98,
+                "popularity": 88,
                 "rating": 4.9
-            },
-            {
-                "id": "tpl_health_concierge",
-                "name": "HealthConcierge AI",
-                "category": "Healthcare",
-                "role": "Medical Appointment Coordinator",
-                "description": "HIPAA-aware concierge for scheduling and health FAQs.",
-                "persona": "You are a supportive medical coordinator. You help users find doctors and book appointments. Always remind users to call 911 for emergencies.",
-                "language": "en-US",
-                "recommended_tools": ["search_knowledge_base", "check_availability", "book_appointment"],
-                "goals": ["Schedule appointment", "Direct to correct department"],
-                "success_criteria": ["appointment confirmed", "scheduled"],
-                "failure_conditions": ["emergency", "chest pain", "bleeding"],
-                "popularity": 92,
-                "rating": 4.8
             },
             {
                 "id": "tpl_security_vault",
@@ -103,19 +142,19 @@ class MarketplaceService:
                 "rating": 4.6
             },
             {
-                "id": "tpl_multi_agent",
-                "name": "Super-Agent Hub",
-                "category": "Orchestration",
-                "role": "Multi-Agent Supervisor (LangGraph)",
-                "description": "Advanced multi-agent system powered by LangGraph.",
-                "persona": "You are the Super-Agent Hub. You coordinate between different specialized sub-agents.",
+                "id": "tpl_callback_survey",
+                "name": "Post-Call Survey — Outbound",
+                "category": "Outbound CX",
+                "role": "Customer Experience Specialist",
+                "description": "Short satisfaction surveys after support or sales interactions.",
+                "persona": "You are a brief, respectful survey agent. Ask three rating questions and thank the customer.",
                 "language": "en-US",
-                "recommended_tools": ["search_knowledge_base", "get_order_status"],
-                "goals": ["Coordinate sub-agents", "Provide single point of contact"],
-                "success_criteria": ["resolved by sub-agent"],
-                "failure_conditions": ["all agents failed"],
-                "popularity": 100,
-                "rating": 5.0
+                "recommended_tools": ["update_user_profile", "schedule_callback"],
+                "goals": ["Complete survey", "Capture NPS score"],
+                "success_criteria": ["survey completed"],
+                "failure_conditions": ["declined", "no time"],
+                "popularity": 72,
+                "rating": 4.5
             }
         ]
 

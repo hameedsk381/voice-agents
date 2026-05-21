@@ -36,18 +36,124 @@ class UltravoxService:
             return f"{self.base_url}{path}"
         return f"{self.base_url}/{path}"
 
-    async def create_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         if not self.enabled:
             raise RuntimeError("Ultravox API key is not configured")
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                self._url("/calls"),
-                json=payload,
+            response = await client.request(
+                method,
+                self._url(path),
+                json=json,
                 headers=self._headers(),
             )
             response.raise_for_status()
-            return response.json()
+            if not response.content:
+                return {}
+            data = response.json()
+            return data if isinstance(data, dict) else {"data": data}
+
+    async def create_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._request("POST", "/calls", json=payload)
+
+    async def create_agent(
+        self,
+        name: str,
+        call_template: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Create an Ultravox Agent (reusable call template)."""
+        return await self._request(
+            "POST",
+            "/agents",
+            json={"name": name, "callTemplate": call_template},
+        )
+
+    async def update_agent(
+        self,
+        ultravox_agent_id: str,
+        *,
+        name: Optional[str] = None,
+        call_template: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {}
+        if name:
+            body["name"] = name
+        if call_template:
+            body["callTemplate"] = call_template
+        return await self._request("PATCH", f"/agents/{ultravox_agent_id}", json=body)
+
+    async def delete_agent(self, ultravox_agent_id: str) -> None:
+        """Delete an Ultravox Agent template."""
+        await self._request("DELETE", f"/agents/{ultravox_agent_id}")
+
+    async def get_call(self, call_id: str) -> Dict[str, Any]:
+        """Fetch call details (transcript, summary, timing)."""
+        return await self._request("GET", f"/calls/{call_id}")
+
+    async def create_agent_call(
+        self,
+        ultravox_agent_id: str,
+        *,
+        template_context: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        call_overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Start a call from a synced Ultravox Agent template.
+        call_overrides may include medium, dataConnection, languageHint, etc.
+        See https://docs.ultravox.ai/api-reference/agents/agents-calls-post
+        """
+        body: Dict[str, Any] = {}
+        if template_context:
+            body["templateContext"] = {
+                str(k): str(v) for k, v in template_context.items() if v is not None
+            }
+        if metadata:
+            body["metadata"] = {
+                str(k): str(v) for k, v in metadata.items() if v is not None
+            }
+        if call_overrides:
+            body.update(call_overrides)
+        return await self._request(
+            "POST",
+            f"/agents/{ultravox_agent_id}/calls",
+            json=body,
+        )
+
+    async def create_browser_call(
+        self,
+        system_prompt: str,
+        model: Optional[str] = None,
+        voice: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        selected_tools: Optional[List[Dict[str, Any]]] = None,
+        initial_state: Optional[Dict[str, Any]] = None,
+        language_hint: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a call for browser/mobile clients using the Ultravox client SDK (WebRTC).
+        Do not set serverWebSocket medium — the SDK joins via joinUrl with low-latency audio.
+        See https://docs.ultravox.ai/apps/sdks
+        """
+        payload: Dict[str, Any] = {
+            "systemPrompt": system_prompt,
+            "model": model or settings.ULTRAVOX_MODEL,
+            "voice": voice or settings.ULTRAVOX_VOICE,
+            "initialOutputMedium": "voice",
+        }
+        if metadata:
+            payload["metadata"] = {str(k): str(v) for k, v in metadata.items() if v is not None}
+        if selected_tools:
+            payload["selectedTools"] = selected_tools
+        if initial_state:
+            payload["initialState"] = initial_state
+        return await self.create_call(payload)
 
     async def create_server_websocket_call(
         self,

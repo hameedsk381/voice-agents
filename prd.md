@@ -1,7 +1,7 @@
 
 # 📄 Product Requirements Document (PRD)
 
-## Product Name (Working): **OpenVoice Orchestrator**
+## Product Name: **Voise AI**
 
 ## Version
 

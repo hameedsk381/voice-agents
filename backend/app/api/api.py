@@ -1,5 +1,19 @@
 from fastapi import APIRouter
-from app.api.endpoints import agents, orchestrator, memory, auth, monitoring, campaigns, analytics, hitl, marketplace, telephony, voices, knowledge
+from app.api.endpoints import (
+    agents,
+    orchestrator,
+    memory,
+    auth,
+    monitoring,
+    campaigns,
+    analytics,
+    hitl,
+    marketplace,
+    telephony,
+    voices,
+    knowledge,
+    ultravox_webhooks,
+)
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
@@ -14,3 +28,6 @@ api_router.include_router(hitl.router, prefix="/hitl", tags=["hitl"])
 api_router.include_router(marketplace.router, prefix="/marketplace", tags=["marketplace"])
 api_router.include_router(telephony.router, prefix="/telephony", tags=["telephony"])
 api_router.include_router(voices.router, prefix="/voices", tags=["voices"])
+api_router.include_router(
+    ultravox_webhooks.router, prefix="/ultravox/webhooks", tags=["ultravox-webhooks"]
+)

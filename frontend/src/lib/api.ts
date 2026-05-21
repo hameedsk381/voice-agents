@@ -1,16 +1,9 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
-
-function getAuthHeader(): Record<string, string> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-}
+import { getApiBaseUrl } from "./api-url";
 
 export async function fetchAgents() {
-    const res = await fetch(`${API_URL}/agents/`, {
+    const res = await fetch(`${getApiBaseUrl()}/agents/`, {
         cache: "no-store",
-        headers: {
-            ...getAuthHeader()
-        }
+        credentials: "include",
     });
     if (!res.ok) {
         throw new Error("Failed to fetch agents");
@@ -19,12 +12,12 @@ export async function fetchAgents() {
 }
 
 export async function createAgent(data: any) {
-    const res = await fetch(`${API_URL}/agents/`, {
+    const res = await fetch(`${getApiBaseUrl()}/agents/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            ...getAuthHeader()
         },
+        credentials: "include",
         body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -34,11 +27,9 @@ export async function createAgent(data: any) {
 }
 
 export async function deleteAgent(id: string) {
-    const res = await fetch(`${API_URL}/agents/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/agents/${id}`, {
         method: 'DELETE',
-        headers: {
-            ...getAuthHeader()
-        }
+        credentials: "include",
     });
     if (!res.ok) {
         throw new Error("Failed to delete agent");
@@ -49,40 +40,53 @@ export async function deleteAgent(id: string) {
 // Generic API Client
 const api = {
     async get(endpoint: string) {
-        const res = await fetch(`${API_URL}${endpoint}`, {
-            headers: { ...getAuthHeader() }
+        const res = await fetch(`${getApiBaseUrl()}${endpoint}`, {
+            credentials: "include",
         });
         if (!res.ok) throw new Error(`GET ${endpoint} failed`);
         return res.json();
     },
     async post(endpoint: string, data: any) {
-        const res = await fetch(`${API_URL}${endpoint}`, {
+        const res = await fetch(`${getApiBaseUrl()}${endpoint}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getAuthHeader()
             },
+            credentials: "include",
             body: JSON.stringify(data),
         });
-        if (!res.ok) throw new Error(`POST ${endpoint} failed`);
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            const detail = errBody.detail || errBody.message || res.statusText;
+            throw new Error(typeof detail === "string" ? detail : `POST ${endpoint} failed`);
+        }
+        return res.json();
+    },
+    async postFormData(endpoint: string, formData: FormData) {
+        const res = await fetch(`${getApiBaseUrl()}${endpoint}`, {
+            method: 'POST',
+            credentials: "include",
+            body: formData,
+        });
+        if (!res.ok) throw new Error(`POST ${endpoint} (FormData) failed`);
         return res.json();
     },
     async put(endpoint: string, data: any) {
-        const res = await fetch(`${API_URL}${endpoint}`, {
+        const res = await fetch(`${getApiBaseUrl()}${endpoint}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                ...getAuthHeader()
             },
+            credentials: "include",
             body: JSON.stringify(data),
         });
         if (!res.ok) throw new Error(`PUT ${endpoint} failed`);
         return res.json();
     },
     async delete(endpoint: string) {
-        const res = await fetch(`${API_URL}${endpoint}`, {
+        const res = await fetch(`${getApiBaseUrl()}${endpoint}`, {
             method: 'DELETE',
-            headers: { ...getAuthHeader() }
+            credentials: "include",
         });
         if (!res.ok) throw new Error(`DELETE ${endpoint} failed`);
         return res.json();

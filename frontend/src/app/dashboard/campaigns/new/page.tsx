@@ -2,21 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, Users, Settings, Phone, Upload, X, Trash2 } from 'lucide-react';
+import api from '@/lib/api';
+import { ArrowLeft, Save, Settings, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
 
 export default function NewCampaignPage() {
     const router = useRouter();
-    const { token } = useAuth();
 
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [agentId, setAgentId] = useState('');
     const [agents, setAgents] = useState<any[]>([]);
     const [concurrency, setConcurrency] = useState(1);
+    const [greeting, setGreeting] = useState('');
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -24,20 +22,15 @@ export default function NewCampaignPage() {
     useEffect(() => {
         const fetchAgents = async () => {
             try {
-                const res = await fetch(`${API_URL}/agents/`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setAgents(data);
-                    if (data.length > 0) setAgentId(data[0].id);
-                }
+                const data = await api.get("/agents/");
+                setAgents(data);
+                if (data.length > 0) setAgentId(data[0].id);
             } catch (err) {
                 console.error(err);
             }
         };
         fetchAgents();
-    }, [token]);
+    }, []);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -45,29 +38,16 @@ export default function NewCampaignPage() {
         setError(null);
 
         try {
-            const res = await fetch(`${API_URL}/campaigns/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    name,
-                    description,
-                    agent_id: agentId,
-                    concurrency_limit: concurrency
-                })
+            const data = await api.post("/campaigns/", {
+                name,
+                description,
+                agent_id: agentId,
+                concurrency_limit: concurrency,
+                greeting: greeting.trim() || undefined,
             });
-
-            if (res.ok) {
-                const data = await res.json();
-                router.push(`/dashboard/campaigns/${data.id}?new=true`);
-            } else {
-                const err = await res.json();
-                setError(err.detail || 'Failed to create campaign');
-            }
-        } catch (err) {
-            setError('System error. Please try again.');
+            router.push(`/dashboard/campaigns/${data.id}?new=true`);
+        } catch (err: any) {
+            setError(err.message || 'System error. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -76,11 +56,11 @@ export default function NewCampaignPage() {
     return (
         <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center gap-4">
-                <Link href="/dashboard/campaigns" className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition-colors">
+                <Link href="/dashboard/campaigns" className="p-2 rounded-lg bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] text-gray-400 transition-colors">
                     <ArrowLeft className="w-5 h-5" />
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Create New Campaign</h1>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Create New Campaign</h1>
                     <p className="text-gray-400">Configure your automated outbound dialing strategy.</p>
                 </div>
             </div>
@@ -88,7 +68,7 @@ export default function NewCampaignPage() {
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Main Config */}
                 <div className="md:col-span-2 space-y-6">
-                    <div className="bg-[#141417] border border-white/10 rounded-2xl p-6 space-y-6">
+                    <div className="bg-[var(--bg-raised)] border border-[var(--border-default)] rounded-2xl p-6 space-y-6">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-400">Campaign Name</label>
                             <input
@@ -96,7 +76,7 @@ export default function NewCampaignPage() {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="E.g. Q1 Product Feedback"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
                                 required
                             />
                         </div>
@@ -107,16 +87,28 @@ export default function NewCampaignPage() {
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 placeholder="Describe the purpose of this campaign..."
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors h-32"
+                                className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors h-32"
                             />
                         </div>
                     </div>
 
-                    <div className="bg-[#141417] border border-white/10 rounded-2xl p-6 space-y-6">
-                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="bg-[var(--bg-raised)] border border-[var(--border-default)] rounded-2xl p-6 space-y-6">
+                        <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
                             <Settings className="w-5 h-5 text-blue-500" />
                             Dialing Strategy
                         </h3>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-400">Opening Greeting (optional)</label>
+                            <input
+                                type="text"
+                                value={greeting}
+                                onChange={(e) => setGreeting(e.target.value)}
+                                placeholder="Hi, this is your team calling about your appointment…"
+                                className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors text-sm"
+                            />
+                            <p className="text-[10px] text-gray-500">Overrides the agent’s default greeting for everyone in this campaign.</p>
+                        </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div className="space-y-2">
@@ -124,7 +116,7 @@ export default function NewCampaignPage() {
                                 <select
                                     value={agentId}
                                     onChange={(e) => setAgentId(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                                    className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
                                     required
                                 >
                                     {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -139,7 +131,7 @@ export default function NewCampaignPage() {
                                     max="50"
                                     value={concurrency}
                                     onChange={(e) => setConcurrency(parseInt(e.target.value))}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                                    className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
                                 />
                                 <p className="text-[10px] text-gray-500">Max parallel calls allowed.</p>
                             </div>

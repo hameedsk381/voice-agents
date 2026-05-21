@@ -2,7 +2,9 @@
 Authentication API endpoints.
 Login, register, refresh token, and user management.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from app.core.config import settings
+from app.core.limiter import limiter
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
@@ -18,7 +20,7 @@ from app.core.security import (
     Token
 )
 from app.core.deps import get_current_user_required, require_admin
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, RevokedToken
 
 router = APIRouter()
 
@@ -54,17 +56,44 @@ class PasswordChange(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 # ==================== Endpoints ====================
 
 @router.post("/register", response_model=UserResponse)
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     user_data: UserCreate,
     db: Session = Depends(database.get_db)
 ):
     """Register a new user."""
+    # Validate password complexity
+    password = user_data.password
+    if len(password) < settings.MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password must be at least {settings.MIN_PASSWORD_LENGTH} characters long"
+        )
+    # Require at least one number, one uppercase character, and one special character
+    import re
+    if not re.search(r"\d", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one digit (0-9)"
+        )
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one uppercase letter"
+        )
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one special character"
+        )
+
     # Check if email already exists
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
@@ -95,7 +124,10 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(database.get_db)
 ):
@@ -119,22 +151,68 @@ async def login(
     user.last_login = datetime.utcnow()
     db.commit()
     
-    return create_tokens(user.id, user.email, user.role)
+    tokens = create_tokens(user.id, user.email, user.role)
+    
+    # Set cookies
+    response.set_cookie(
+        key="access_token",
+        value=tokens.access_token,
+        httponly=True,
+        max_age=60 * 24 * 60,  # 24 hours
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        path="/"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens.refresh_token,
+        httponly=True,
+        max_age=7 * 24 * 60 * 60,  # 7 days
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        path="/"
+    )
+    
+    return tokens
 
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    request: RefreshTokenRequest,
+    response: Response,
+    request: Request,
+    body_data: Optional[RefreshTokenRequest] = None,
     db: Session = Depends(database.get_db)
 ):
     """Refresh access token using refresh token."""
-    token_data = decode_token(request.refresh_token)
+    # 1. Try cookie first
+    refresh = request.cookies.get("refresh_token")
+    
+    # 2. Try body fallback
+    if not refresh and body_data:
+        refresh = body_data.refresh_token
+        
+    if not refresh:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token (missing)"
+        )
+        
+    token_data = decode_token(refresh)
     
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token"
         )
+    
+    # Check if this token was already revoked
+    if token_data.jti:
+        is_revoked = db.query(RevokedToken).filter(RevokedToken.jti == token_data.jti).first()
+        if is_revoked:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has been revoked"
+            )
     
     user = db.query(User).filter(User.id == token_data.user_id).first()
     
@@ -144,7 +222,47 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
-    return create_tokens(user.id, user.email, user.role)
+    tokens = create_tokens(user.id, user.email, user.role)
+    
+    # Revoke the old token by adding its jti to the database blacklist
+    if token_data.jti:
+        from datetime import timedelta
+        revoked = RevokedToken(
+            jti=token_data.jti,
+            expires_at=datetime.fromtimestamp(token_data.exp) if token_data.exp else datetime.utcnow() + timedelta(days=7)
+        )
+        db.add(revoked)
+        db.commit()
+    
+    # Set cookies
+    response.set_cookie(
+        key="access_token",
+        value=tokens.access_token,
+        httponly=True,
+        max_age=60 * 24 * 60,  # 24 hours
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        path="/"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens.refresh_token,
+        httponly=True,
+        max_age=7 * 24 * 60 * 60,  # 7 days
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        path="/"
+    )
+    
+    return tokens
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Logout and clear cookies."""
+    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="refresh_token", path="/")
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/me", response_model=UserResponse)

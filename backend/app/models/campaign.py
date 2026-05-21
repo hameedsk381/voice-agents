@@ -43,6 +43,8 @@ class Campaign(Base):
     start_time = Column(DateTime, nullable=True)
     concurrency_limit = Column(Integer, default=1)  # Max parallel calls
     retry_config = Column(JSON, default=lambda: {"max_retries": 3, "retry_delay_minutes": 60})
+    # Per-campaign voice overrides: greeting (mustache), extra templateContext keys
+    call_config = Column(JSON, default=dict)
     
     # Stats
     total_contacts = Column(Integer, default=0)

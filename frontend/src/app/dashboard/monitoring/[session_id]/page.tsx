@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/api';
 import {
     Phone, User, MessageSquare, Zap, ShieldAlert,
     ArrowLeft, Activity, Box, Terminal, ChevronRight
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8001';
 
 interface Event {
@@ -25,7 +24,6 @@ interface Message {
 
 export default function SessionMonitoringPage() {
     const { session_id } = useParams();
-    const { token } = useAuth();
     const router = useRouter();
 
     const [messages, setMessages] = useState<Message[]>([]);
@@ -48,15 +46,10 @@ export default function SessionMonitoringPage() {
         // Fetch initial state
         const fetchInitial = async () => {
             try {
-                const res = await fetch(`${API_URL}/monitoring/session/${session_id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setDetails(data);
-                    setMessages(data.history || []);
-                    setStatus(data.status);
-                }
+                const data = await api.get(`/monitoring/session/${session_id}`);
+                setDetails(data);
+                setMessages(data.history || []);
+                setStatus(data.status);
             } catch (err) {
                 console.error("Failed to fetch session metadata", err);
             }
@@ -76,7 +69,7 @@ export default function SessionMonitoringPage() {
         };
 
         return () => ws.close();
-    }, [session_id, token]);
+    }, [session_id]);
 
     const handleMonitoringEvent = (event: any) => {
         const { type, data } = event;
@@ -131,12 +124,12 @@ export default function SessionMonitoringPage() {
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => router.back()}
-                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition-colors"
+                        className="p-2 rounded-lg bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] text-gray-400 transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <div>
-                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                        <h1 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
                             Session Monitor
                             <span className="text-xs font-mono text-gray-500 font-normal">#{session_id?.toString().slice(0, 8)}</span>
                         </h1>
@@ -165,9 +158,9 @@ export default function SessionMonitoringPage() {
 
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
                 {/* Main Transcript Panel */}
-                <div className="lg:col-span-2 flex flex-col bg-[#141417] border border-white/10 rounded-2xl overflow-hidden">
-                    <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
-                        <div className="flex items-center gap-2 text-sm font-medium text-white">
+                <div className="lg:col-span-2 flex flex-col bg-[var(--bg-raised)] border border-[var(--border-default)] rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-[var(--border-default)] flex items-center justify-between bg-[var(--bg-overlay)]">
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
                             <MessageSquare className="w-4 h-4 text-blue-400" />
                             Live Transcript
                         </div>
@@ -187,7 +180,7 @@ export default function SessionMonitoringPage() {
                         {messages.map((msg, i) => (
                             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
                                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === 'user'
-                                    ? 'bg-white/5 border border-white/10 text-gray-200'
+                                    ? 'bg-[var(--glass-bg)] border border-[var(--border-default)] text-gray-200'
                                     : 'bg-blue-600/20 border border-blue-500/30 text-blue-50'
                                     }`}>
                                     <div className="text-[10px] uppercase tracking-wider font-bold mb-1 opacity-50">
@@ -216,8 +209,8 @@ export default function SessionMonitoringPage() {
                 </div>
 
                 {/* Sidebar Decision Trace */}
-                <div className="flex flex-col bg-[#141417] border border-white/10 rounded-2xl overflow-hidden">
-                    <div className="px-6 py-4 border-b border-white/10 flex items-center gap-2 bg-white/[0.02] text-sm font-medium text-white">
+                <div className="flex flex-col bg-[var(--bg-raised)] border border-[var(--border-default)] rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-[var(--border-default)] flex items-center gap-2 bg-[var(--bg-overlay)] text-sm font-medium text-[var(--text-primary)]">
                         <Terminal className="w-4 h-4 text-purple-400" />
                         Decision Trace
                     </div>
@@ -227,7 +220,7 @@ export default function SessionMonitoringPage() {
                             <p className="text-center text-xs text-gray-500 mt-10 italic">No events recorded yet</p>
                         )}
                         {logs.map((log, i) => (
-                            <div key={i} className="group relative pl-4 border-l border-white/10 py-1">
+                            <div key={i} className="group relative pl-4 border-l border-[var(--border-default)] py-1">
                                 <div className={`absolute -left-[5px] top-2.5 w-2 h-2 rounded-full border border-[#141417] ${log.type === 'alert' || log.type === 'critical' ? 'bg-red-500' :
                                         log.type === 'tool' ? 'bg-purple-500' :
                                             log.type === 'intent' ? 'bg-yellow-500' : 'bg-blue-500'
@@ -235,11 +228,11 @@ export default function SessionMonitoringPage() {
                                 <div className="text-[10px] text-gray-500 mb-0.5">
                                     {new Date(log.time).toLocaleTimeString()}
                                 </div>
-                                <div className="text-xs font-medium text-white group-hover:text-blue-400 transition-colors">
+                                <div className="text-xs font-medium text-[var(--text-primary)] group-hover:text-blue-400 transition-colors">
                                     {log.content}
                                 </div>
                                 {log.detail && (
-                                    <div className="mt-2 p-2 rounded bg-black/40 border border-white/5 text-[10px] text-gray-400 font-mono break-all line-clamp-2 group-hover:line-clamp-none transition-all">
+                                    <div className="mt-2 p-2 rounded bg-[var(--bg-inset)] border border-[var(--border-subtle)] text-[10px] text-gray-400 font-mono break-all line-clamp-2 group-hover:line-clamp-none transition-all">
                                         {typeof log.detail === 'object' ? JSON.stringify(log.detail) : log.detail}
                                     </div>
                                 )}
@@ -248,14 +241,14 @@ export default function SessionMonitoringPage() {
                     </div>
 
                     {/* Agent Info Footnote */}
-                    <div className="p-4 bg-white/[0.02] border-t border-white/10">
+                    <div className="p-4 bg-[var(--bg-overlay)] border-t border-[var(--border-default)]">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-white font-bold">
                                 {details?.agent_id?.slice(0, 1).toUpperCase()}
                             </div>
                             <div>
                                 <p className="text-xs text-gray-500">Current Agent</p>
-                                <p className="text-sm font-semibold text-white">#{details?.agent_id?.slice(0, 8)}</p>
+                                <p className="text-sm font-semibold text-[var(--text-primary)]">#{details?.agent_id?.slice(0, 8)}</p>
                             </div>
                         </div>
                     </div>

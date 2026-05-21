@@ -1,6 +1,6 @@
 # Enterprise Voice Pipeline Documentation
 
-This document outlines the end-to-end flow of the OpenVoice Orchestrator pipeline, focusing on the integration of enterprise-grade control and safety layers.
+This document outlines the end-to-end flow of the Voise AI voice pipeline, focusing on enterprise control and safety layers (Ultravox runtime by default).
 
 ## 1. Interaction Entry (WebSocket)
 The pipeline begins when a client connects to `/ws/{agent_id}`. 

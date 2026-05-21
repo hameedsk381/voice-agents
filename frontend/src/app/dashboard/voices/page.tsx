@@ -5,8 +5,6 @@ import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Play, Mic, Plus, Trash2, Wand2, Loader2, Upload } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
-
 interface Voice {
     id: string;
     name: string;
@@ -35,24 +33,42 @@ export default function VoiceLabPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 select-none">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-white">Voice Lab</h2>
-                    <p className="text-gray-400">Design unique voices or clone existing ones for your agents.</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                        Voice <span className="text-gradient-brand">Lab</span>
+                    </h2>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">Design unique text-to-speech presets or clone custom reference samples.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2.5">
+                    {activeTab !== "gallery" && (
+                        <button
+                            onClick={() => setActiveTab("gallery")}
+                            className="px-4 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-overlay)] border border-[var(--border-default)] hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all duration-300"
+                        >
+                            Back to Gallery
+                        </button>
+                    )}
                     <button
                         onClick={() => setActiveTab("design")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'design' ? 'bg-purple-600 text-white' : 'bg-white/5 text-gray-300 hover:bg-white/10'}`}
+                        className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-300 ${
+                            activeTab === 'design' 
+                                ? 'bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white shadow-lg' 
+                                : 'bg-[var(--bg-overlay)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]'
+                        }`}
                     >
-                        <Wand2 className="w-4 h-4" />
+                        <Wand2 className="w-3.5 h-3.5" />
                         Design Voice
                     </button>
                     <button
                         onClick={() => setActiveTab("clone")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'clone' ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-300 hover:bg-white/10'}`}
+                        className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-300 ${
+                            activeTab === 'clone' 
+                                ? 'bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white shadow-lg' 
+                                : 'bg-[var(--bg-overlay)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]'
+                        }`}
                     >
-                        <Mic className="w-4 h-4" />
+                        <Mic className="w-3.5 h-3.5" />
                         Clone Voice
                     </button>
                 </div>
@@ -76,40 +92,61 @@ export default function VoiceLabPage() {
 
 function VoiceGallery({ voices, loading, onDelete }: { voices: Voice[], loading: boolean, onDelete: () => void }) {
     const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this voice?")) return;
+        if (!confirm("Are you sure you want to delete this voice preset?")) return;
         try {
             await api.delete(`/voices/${id}`);
             onDelete();
         } catch (e) {
             console.error(e);
-            alert("Failed to delete voice");
+            alert("Failed to delete voice preset");
         }
     };
 
-    if (loading) return <div className="text-white">Loading voices...</div>;
+    if (loading) {
+        return (
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="glass-card h-32 animate-pulse" />
+                ))}
+            </div>
+        );
+    }
 
     return (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {voices.map((voice) => (
-                <Card key={voice.id} className="bg-[#0f0f10] border-white/10 group">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-base font-semibold text-white">{voice.name}</CardTitle>
+                <div key={voice.id} className="glass-card p-5 group flex flex-col justify-between hover:border-[var(--border-active)] transition-all relative">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-bold text-[var(--text-primary)]">{voice.name}</h3>
                         {voice.type === 'cloned' && (
-                            <button onClick={() => handleDelete(voice.id)} className="text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={() => handleDelete(voice.id)} 
+                                className="text-[var(--text-tertiary)] hover:text-[var(--accent-rose)] opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                            >
                                 <Trash2 className="w-4 h-4" />
                             </button>
                         )}
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-2 mt-2">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${voice.type === 'standard' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>
-                                {voice.type === 'standard' ? 'Standard' : 'Cloned'}
-                            </span>
-                            <span className="text-xs text-gray-500 font-mono">{voice.id.slice(0, 8)}...</span>
-                        </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
+                            voice.type === 'standard' 
+                                ? 'bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border-[var(--accent-blue)]/20' 
+                                : 'bg-[var(--accent-purple)]/10 text-[var(--accent-purple)] border-[var(--accent-purple)]/20'
+                        }`}>
+                            {voice.type === 'standard' ? 'Standard' : 'Cloned'}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-tertiary)] font-mono">ID: {voice.id.slice(0, 8)}...</span>
+                    </div>
+                </div>
             ))}
+
+            {voices.length === 0 && (
+                <div className="col-span-full py-16 text-center text-[var(--text-secondary)] border border-dashed border-[var(--border-default)] rounded-2xl bg-[var(--bg-overlay)]">
+                    <Mic className="w-8 h-8 mx-auto mb-3 text-[var(--text-tertiary)]" />
+                    <p className="text-sm font-semibold">No voice profiles registered</p>
+                    <p className="text-xs text-[var(--text-tertiary)] mt-1">Design or clone a brand voice for your agents.</p>
+                </div>
+            )}
         </div>
     );
 }
@@ -130,17 +167,7 @@ function VoiceDesigner({ onBack }: { onBack: () => void }) {
             form.append("text", text);
             form.append("instruct", instruct);
 
-            // Use raw fetch for form data if api wrapper doesn't support it
-            const token = localStorage.getItem('access_token');
-            const res = await fetch(`${API_URL}/voices/design`, {
-                method: "POST",
-                headers: token ? { "Authorization": `Bearer ${token}` } : {},
-                body: form
-            });
-
-            if (!res.ok) throw new Error("Design failed");
-
-            const data = await res.json();
+            const data = await api.postFormData('/voices/design', form);
             setAudio(data.audio_base64);
         } catch (err) {
             console.error(err);
@@ -151,57 +178,56 @@ function VoiceDesigner({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <Card className="bg-[#0f0f10] border-white/10 max-w-2xl">
-            <CardHeader>
-                <CardTitle className="text-white">Voice Designer</CardTitle>
-                <CardDescription>Describe a voice and generate a preview using Qwen-TTS.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleDesign} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-1">Voice Description (Prompt)</label>
-                        <textarea
-                            required
-                            value={instruct}
-                            onChange={e => setInstruct(e.target.value)}
-                            placeholder="e.g., A deep, raspy elderly male voice with a slow pace and wisdom."
-                            rows={3}
-                            className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-purple-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-1">Sample Text</label>
-                        <input
-                            value={text}
-                            onChange={e => setText(e.target.value)}
-                            className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-purple-500"
-                        />
-                    </div>
+        <div className="glass-card p-6 md:p-8 max-w-2xl relative overflow-hidden">
+            <div className="pb-5 border-b border-[var(--border-subtle)] mb-6">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Voice Prompt Design</h3>
+                <p className="text-[10px] text-[var(--text-secondary)] mt-1">Describe tone, pace, and style to preview how your agent will sound.</p>
+            </div>
 
-                    <div className="flex items-center gap-4">
-                        <button
-                            type="submit"
-                            disabled={generating}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md font-medium disabled:opacity-50"
-                        >
-                            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                            {generating ? "Generating..." : "Generate Preview"}
-                        </button>
-                        <button type="button" onClick={onBack} className="text-gray-400 hover:text-white">Cancel</button>
-                    </div>
-                </form>
+            <form onSubmit={handleDesign} className="space-y-5">
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Voice Prompt Description</label>
+                    <textarea
+                        required
+                        value={instruct}
+                        onChange={e => setInstruct(e.target.value)}
+                        placeholder="e.g., A deep, raspy elderly male voice with a slow pace and wisdom."
+                        rows={3}
+                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all resize-none"
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Sample Synthesis Text</label>
+                    <input
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all"
+                    />
+                </div>
 
-                {audio && (
-                    <div className="mt-8 p-4 bg-white/5 rounded-lg border border-white/10">
-                        <h4 className="text-sm font-medium text-white mb-2">Preview</h4>
-                        <audio controls src={`data:audio/wav;base64,${audio}`} className="w-full" />
-                        <p className="text-xs text-gray-500 mt-2">
-                            Note: This is a generated sample. To save this voice, you would verify it and then register it (Not implemented in this demo).
-                        </p>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+                <div className="flex items-center gap-4 pt-4 border-t border-[var(--border-subtle)]">
+                    <button
+                        type="submit"
+                        disabled={generating}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 hover:-translate-y-0.5 active:scale-98"
+                    >
+                        {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                        {generating ? "Generating..." : "Generate Preview"}
+                    </button>
+                    <button type="button" onClick={onBack} className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
+                </div>
+            </form>
+
+            {audio && (
+                <div className="mt-8 p-5 bg-[var(--bg-overlay)] rounded-xl border border-[var(--border-subtle)] animate-fade">
+                    <h4 className="text-xs font-bold text-[var(--text-primary)] mb-3">Generated Auditory Sample</h4>
+                    <audio controls src={`data:audio/wav;base64,${audio}`} className="w-full" />
+                    <p className="text-[10px] text-[var(--text-tertiary)] italic mt-3 leading-relaxed">
+                        Verify this generated preset clip before mapping it to target voice agent templates.
+                    </p>
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -222,86 +248,78 @@ function VoiceCloner({ onBack }: { onBack: () => void }) {
             form.append("ref_text", refText);
             form.append("file", file);
 
-            const token = localStorage.getItem('access_token');
-            const res = await fetch(`${API_URL}/voices/register`, {
-                method: "POST",
-                headers: token ? { "Authorization": `Bearer ${token}` } : {},
-                body: form
-            });
+            await api.postFormData('/voices/register', form);
 
-            if (!res.ok) throw new Error("Cloning failed");
-
-            alert("Voice cloned successfully!");
+            alert("Voice preset cloned successfully!");
             onBack();
         } catch (err) {
             console.error(err);
-            alert("Failed to clone voice");
+            alert("Failed to clone voice preset");
         } finally {
             setCloning(false);
         }
     };
 
     return (
-        <Card className="bg-[#0f0f10] border-white/10 max-w-2xl">
-            <CardHeader>
-                <CardTitle className="text-white">Clone Voice</CardTitle>
-                <CardDescription>Upload a clear audio sample (10-30s) to create a voice clone.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleClone} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-1">Voice Name</label>
-                        <input
-                            required
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            placeholder="e.g. Founder Voice"
-                            className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-1">Reference Text (Transcript)</label>
-                        <textarea
-                            required
-                            value={refText}
-                            onChange={e => setRefText(e.target.value)}
-                            placeholder="What was said in the audio clip? Accurate text improves cloning quality."
-                            rows={3}
-                            className="w-full bg-black/50 border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-1">Audio File (WAV/MP3)</label>
-                        <div className="border-2 border-dashed border-white/10 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:border-blue-500/50 transition-colors">
-                            <Upload className="w-8 h-8 text-gray-500 mb-2" />
-                            <input
-                                type="file"
-                                accept="audio/*"
-                                onChange={e => setFile(e.target.files?.[0] || null)}
-                                className="block w-full text-sm text-gray-400
-                                  file:mr-4 file:py-2 file:px-4
-                                  file:rounded-full file:border-0
-                                  file:text-sm file:font-semibold
-                                  file:bg-blue-600 file:text-white
-                                  hover:file:bg-blue-500
-                                "
-                            />
-                        </div>
-                    </div>
+        <div className="glass-card p-6 md:p-8 max-w-2xl relative overflow-hidden">
+            <div className="pb-5 border-b border-[var(--border-subtle)] mb-6">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Voice Reference Cloner</h3>
+                <p className="text-[10px] text-[var(--text-secondary)] mt-1">Upload a clean audio sample (10-30s) to create an immediate voice clone profile.</p>
+            </div>
 
-                    <div className="flex items-center gap-4 mt-6">
-                        <button
-                            type="submit"
-                            disabled={cloning || !file}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-medium disabled:opacity-50"
-                        >
-                            {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                            {cloning ? "Cloning..." : "Clone Voice"}
-                        </button>
-                        <button type="button" onClick={onBack} className="text-gray-400 hover:text-white">Cancel</button>
+            <form onSubmit={handleClone} className="space-y-5">
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Voice Profile Name</label>
+                    <input
+                        required
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="e.g. Founder Corporate Preset"
+                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all"
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Reference Audio Transcript</label>
+                    <textarea
+                        required
+                        value={refText}
+                        onChange={e => setRefText(e.target.value)}
+                        placeholder="Accurately input what was said in the audio reference sample clip..."
+                        rows={3}
+                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all resize-none"
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Upload Reference File (WAV/MP3)</label>
+                    <div className="border-2 border-dashed border-[var(--border-default)] bg-[var(--bg-overlay)] rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-[var(--accent-cyan)]/50 transition-colors select-none">
+                        <Upload className="w-7 h-7 text-[var(--text-tertiary)] mb-2" />
+                        <input
+                            type="file"
+                            accept="audio/*"
+                            onChange={e => setFile(e.target.files?.[0] || null)}
+                            className="block w-full text-xs text-[var(--text-secondary)] cursor-pointer
+                              file:mr-4 file:py-1.5 file:px-4
+                              file:rounded-full file:border-0
+                              file:text-xs file:font-semibold
+                              file:bg-[var(--glass-bg)] file:text-[var(--text-primary)]
+                              file:border file:border-[var(--border-default)]
+                              hover:file:bg-white/[0.08]"
+                        />
                     </div>
-                </form>
-            </CardContent>
-        </Card>
+                </div>
+
+                <div className="flex items-center gap-4 pt-6 border-t border-[var(--border-subtle)]">
+                    <button
+                        type="submit"
+                        disabled={cloning || !file}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 hover:-translate-y-0.5 active:scale-98"
+                    >
+                        {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                        {cloning ? "Cloning..." : "Clone Voice"}
+                    </button>
+                    <button type="button" onClick={onBack} className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
+                </div>
+            </form>
+        </div>
     );
 }

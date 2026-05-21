@@ -1,37 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/api';
 import Link from 'next/link';
-import { Plus, ListFilter, Play, Pause, CheckCircle2, AlertCircle, Phone, Users, Calendar } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
-
-interface Campaign {
-    id: string;
-    name: string;
-    status: string;
-    total_contacts: number;
-    completed_calls: number;
-    failed_calls: number;
-    created_at: string;
-    agent_id: string;
-}
+import { Plus, Phone, Users, Calendar } from 'lucide-react';
+import { Campaign } from '@/types/types';
 
 export default function CampaignsPage() {
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const { token } = useAuth();
 
     const fetchCampaigns = async () => {
         try {
-            const res = await fetch(`${API_URL}/campaigns/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setCampaigns(data);
-            }
+            const data = await api.get("/campaigns/");
+            setCampaigns(data);
         } catch (err) {
             console.error(err);
         } finally {
@@ -41,27 +23,29 @@ export default function CampaignsPage() {
 
     useEffect(() => {
         fetchCampaigns();
-    }, [token]);
+    }, []);
 
     const getStatusStyles = (status: string) => {
         switch (status.toLowerCase()) {
-            case 'running': return 'bg-green-500/10 text-green-500 border-green-500/20';
-            case 'paused': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-            case 'completed': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-            default: return 'bg-gray-500/10 text-gray-500 border-white/10';
+            case 'running': return 'bg-[var(--accent-emerald)]/10 text-[var(--accent-emerald)] border-[var(--accent-emerald)]/20';
+            case 'paused': return 'bg-[var(--accent-amber)]/10 text-[var(--accent-amber)] border-[var(--accent-amber)]/20';
+            case 'completed': return 'bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border-[var(--accent-blue)]/20';
+            default: return 'bg-[var(--glass-bg)] text-[var(--text-tertiary)] border-[var(--border-subtle)]';
         }
     };
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Outbound Campaigns</h1>
-                    <p className="text-gray-400">Manage automated calling campaigns and contact lists.</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                        Outbound <span className="text-gradient-brand">Campaigns</span>
+                    </h2>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">Manage automated calling campaigns and upload customized contact lists.</p>
                 </div>
                 <Link href="/dashboard/campaigns/new">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-all">
-                        <Plus className="w-5 h-5" />
+                    <button className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white hover:shadow-lg hover:shadow-[var(--accent-cyan)]/25 transition-all duration-300">
+                        <Plus className="w-4 h-4" />
                         New Campaign
                     </button>
                 </Link>
@@ -69,77 +53,86 @@ export default function CampaignsPage() {
 
             {/* Campaign Cards */}
             {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[1, 2, 3].map(i => <div key={i} className="h-64 rounded-2xl bg-white/5 animate-pulse border border-white/10" />)}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {[1, 2, 3].map(i => <div key={i} className="h-64 glass-card animate-pulse" />)}
                 </div>
             ) : campaigns.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10">
-                    <Phone className="w-12 h-12 text-gray-600 mb-4" />
-                    <h3 className="text-xl font-medium text-white">No campaigns found</h3>
-                    <p className="text-gray-400 mt-2 max-w-sm text-center">Create your first outbound campaign to automate your voice interactions.</p>
-                    <Link href="/dashboard/campaigns/new" className="mt-6">
-                        <button className="text-blue-500 hover:text-blue-400 font-medium underline underline-offset-4">Create Campaign Now</button>
+                <div className="flex flex-col items-center justify-center py-20 bg-[var(--bg-overlay)] rounded-2xl border border-dashed border-[var(--border-default)]">
+                    <Phone className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
+                    <h3 className="text-xs font-bold text-[var(--text-primary)]">No campaigns found</h3>
+                    <p className="text-[10px] text-[var(--text-tertiary)] mt-1 max-w-xs text-center leading-relaxed">Create your first outbound campaign to automate your voice interactions.</p>
+                    <Link href="/dashboard/campaigns/new" className="mt-4">
+                        <span className="text-xs font-semibold text-[var(--accent-cyan)] hover:underline cursor-pointer">Create Campaign Now</span>
                     </Link>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {campaigns.map((campaign) => (
-                        <Link
-                            key={campaign.id}
-                            href={`/dashboard/campaigns/${campaign.id}`}
-                            className="bg-[#141417] border border-white/10 rounded-2xl p-6 hover:border-blue-500/50 transition-all group"
-                        >
-                            <div className="flex items-start justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors">{campaign.name}</h3>
-                                <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${getStatusStyles(campaign.status)}`}>
-                                    {campaign.status}
-                                </div>
-                            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {campaigns.map((campaign) => {
+                        const progress = campaign.total_contacts && campaign.total_contacts > 0 
+                            ? Math.round(((campaign.completed_calls || 0) / campaign.total_contacts) * 100) 
+                            : 0;
+                        return (
+                            <Link
+                                key={campaign.id}
+                                href={`/dashboard/campaigns/${campaign.id}`}
+                                className="group block"
+                            >
+                                <div className="glass-card p-5 group flex flex-col justify-between h-full hover:border-[var(--border-active)] transition-all relative">
+                                    <div className="flex items-start justify-between mb-4 gap-2">
+                                        <h3 className="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-cyan)] transition-colors truncate max-w-[170px]">{campaign.name}</h3>
+                                        <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border shrink-0 ${getStatusStyles(campaign.status)}`}>
+                                            {campaign.status}
+                                        </div>
+                                    </div>
 
-                            <div className="space-y-4">
-                                {/* Stats */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    <div className="text-center p-2 rounded-lg bg-white/5 border border-white/5">
-                                        <p className="text-xs text-gray-500 uppercase font-bold">Total</p>
-                                        <p className="text-lg font-mono text-white">{campaign.total_contacts}</p>
-                                    </div>
-                                    <div className="text-center p-2 rounded-lg bg-green-500/5 border border-green-500/10">
-                                        <p className="text-xs text-green-500/50 uppercase font-bold">Success</p>
-                                        <p className="text-lg font-mono text-green-400">{campaign.completed_calls}</p>
-                                    </div>
-                                    <div className="text-center p-2 rounded-lg bg-red-500/5 border border-red-500/10">
-                                        <p className="text-xs text-red-500/50 uppercase font-bold">Failed</p>
-                                        <p className="text-lg font-mono text-red-400">{campaign.failed_calls}</p>
-                                    </div>
-                                </div>
+                                    <div className="space-y-4">
+                                        {/* Stats */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="text-center p-2 rounded-xl bg-[var(--bg-overlay)] border border-[var(--border-subtle)]">
+                                                <p className="text-[9px] text-[var(--text-tertiary)] uppercase font-bold tracking-wider">Total</p>
+                                                <p className="text-sm font-mono font-bold text-[var(--text-primary)] mt-0.5">{campaign.total_contacts}</p>
+                                            </div>
+                                            <div className="text-center p-2 rounded-xl bg-[var(--accent-emerald)]/[0.03] border border-[var(--accent-emerald)]/10">
+                                                <p className="text-[9px] text-[var(--accent-emerald)]/70 uppercase font-bold tracking-wider">Success</p>
+                                                <p className="text-sm font-mono font-bold text-[var(--accent-emerald)] mt-0.5">{campaign.completed_calls}</p>
+                                            </div>
+                                            <div className="text-center p-2 rounded-xl bg-[var(--accent-rose)]/[0.03] border border-[var(--accent-rose)]/10">
+                                                <p className="text-[9px] text-[var(--accent-rose)]/70 uppercase font-bold tracking-wider">Failed</p>
+                                                <p className="text-sm font-mono font-bold text-[var(--accent-rose)] mt-0.5">{campaign.failed_calls}</p>
+                                            </div>
+                                        </div>
 
-                                {/* Progress Bar */}
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-[11px] text-gray-500">
-                                        <span>Progress</span>
-                                        <span>{campaign.total_contacts > 0 ? Math.round((campaign.completed_calls / campaign.total_contacts) * 100) : 0}%</span>
-                                    </div>
-                                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-blue-500 transition-all duration-500"
-                                            style={{ width: `${campaign.total_contacts > 0 ? (campaign.completed_calls / campaign.total_contacts) * 100 : 0}%` }}
-                                        />
-                                    </div>
-                                </div>
+                                        {/* Progress Bar */}
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between text-[10px] font-semibold text-[var(--text-secondary)]">
+                                                <span>Completion Rate</span>
+                                                <span className="font-mono">{progress}%</span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-[var(--glass-bg)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] transition-all duration-500 rounded-full"
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+                                        </div>
 
-                                <div className="flex items-center gap-4 pt-2 border-t border-white/5 text-xs text-gray-500">
-                                    <div className="flex items-center gap-1">
-                                        <Users className="w-3 h-3" />
-                                        <span>Agent #{campaign.agent_id.slice(0, 4)}</span>
+                                        <div className="flex items-center gap-4 pt-4 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)] font-medium">
+                                            <div className="flex items-center gap-1.5">
+                                                <Users className="w-3.5 h-3.5" />
+                                                <span>Agent: #{campaign.agent_id.slice(0, 5)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 ml-auto">
+                                                <Calendar className="w-3.5 h-3.5" />
+                                                <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
-                                    </div>
+                                    {/* Subtle bottom hover line */}
+                                    <div className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-transparent via-[var(--accent-cyan)] to-transparent" />
                                 </div>
-                            </div>
-                        </Link>
-                    ))}
+                            </Link>
+                        );
+                    })}
                 </div>
             )}
         </div>

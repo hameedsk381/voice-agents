@@ -4,10 +4,13 @@ __pycache__/
 *.pyc
 .env
 .env.local
+!.env.example
+!**/.env.example
 .env.development.local
 .env.test
 .env.production.local
 venv/
+.venv/
 env/
 
 # Build outputs

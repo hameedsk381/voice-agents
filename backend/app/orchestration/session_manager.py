@@ -22,6 +22,7 @@ class SessionManager:
             self.redis = redis.Redis(
                 host=settings.REDIS_HOST,
                 port=settings.REDIS_PORT,
+                password=settings.REDIS_PASSWORD,
                 decode_responses=True
             )
             logger.info(f"Connected to Redis at {settings.REDIS_HOST}:{settings.REDIS_PORT}")
@@ -43,6 +44,9 @@ class SessionManager:
         
     def _human_channel_key(self, session_id: str) -> str:
         return f"human_intervention:{session_id}"
+
+    def _ultravox_call_key(self, ultravox_call_id: str) -> str:
+        return f"ultravox_call:{ultravox_call_id}"
     
     async def create_session(
         self, 
@@ -130,6 +134,51 @@ class SessionManager:
             # Return in format expected by LLM
             return [{"role": h["role"], "content": h["content"]} for h in session["history"]]
         return []
+
+    async def set_floor_owner(self, session_id: str, owner: str) -> bool:
+        """Track who may speak: user | agent | human."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
+        metadata = dict(session.get("metadata") or {})
+        metadata["floor_owner"] = owner
+        await self.update_session(session_id, {"metadata": metadata})
+        return True
+
+    async def get_floor_owner(self, session_id: str) -> str:
+        session = await self.get_session(session_id)
+        if session:
+            return (session.get("metadata") or {}).get("floor_owner", "user")
+        return "user"
+
+    async def link_ultravox_call_id(self, session_id: str, ultravox_call_id: str) -> bool:
+        """Index Ultravox callId → Voise session for lifecycle webhooks."""
+        await self.connect()
+        await self.redis.setex(
+            self._ultravox_call_key(ultravox_call_id),
+            self.session_ttl,
+            session_id,
+        )
+        return await self.update_session_metadata(
+            session_id, {"ultravox_call_id": ultravox_call_id}
+        )
+
+    async def resolve_session_id_by_ultravox_call(
+        self, ultravox_call_id: str
+    ) -> Optional[str]:
+        await self.connect()
+        session_id = await self.redis.get(self._ultravox_call_key(ultravox_call_id))
+        return session_id
+
+    async def update_session_metadata(self, session_id: str, updates: Dict[str, Any]) -> bool:
+        """Merge keys into session metadata without replacing the whole blob."""
+        session = await self.get_session(session_id)
+        if not session:
+            return False
+        metadata = dict(session.get("metadata") or {})
+        metadata.update(updates)
+        await self.update_session(session_id, {"metadata": metadata})
+        return True
     
     async def log_tool_call(self, session_id: str, tool_name: str, arguments: dict, result: str):
         """Log a tool call in the session."""

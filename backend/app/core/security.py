@@ -9,8 +9,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
+from app.core.config import settings
+
 # Security config
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-super-secret-key-change-in-production")
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -25,10 +27,14 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+import uuid
+
 class TokenData(BaseModel):
     user_id: Optional[str] = None
     email: Optional[str] = None
     role: Optional[str] = None
+    jti: Optional[str] = None
+    exp: Optional[int] = None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -56,10 +62,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def create_refresh_token(data: dict) -> str:
-    """Create a JWT refresh token."""
+    """Create a JWT refresh token with unique JTI."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "type": "refresh"})
+    jti = str(uuid.uuid4())
+    to_encode.update({"exp": expire, "type": "refresh", "jti": jti})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -71,11 +78,13 @@ def decode_token(token: str) -> Optional[TokenData]:
         user_id: str = payload.get("sub")
         email: str = payload.get("email")
         role: str = payload.get("role")
+        jti: str = payload.get("jti")
+        exp: int = payload.get("exp")
         
         if user_id is None:
             return None
         
-        return TokenData(user_id=user_id, email=email, role=role)
+        return TokenData(user_id=user_id, email=email, role=role, jti=jti, exp=exp)
     except JWTError:
         return None
 

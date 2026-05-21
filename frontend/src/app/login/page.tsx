@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import { Mic, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -26,84 +27,148 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[#0a0a0b] px-4">
-            <div className="w-full max-w-md">
-                {/* Logo */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
-                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
+        <div className="min-h-screen flex bg-[var(--bg-base)]">
+            {/* LEFT PANEL — Brand Display (hidden on mobile) */}
+            <div className="hidden lg:flex w-1/2 bg-[var(--bg-surface)] relative overflow-hidden flex-col justify-between p-16 border-r border-[var(--border-subtle)]">
+                {/* Background ambient orbs */}
+                <div className="absolute top-[-200px] left-[-100px] w-[500px] h-[500px] rounded-full bg-[radial-gradient(circle,rgba(0,212,170,0.15)_0%,transparent_70%)] blur-[40px] pointer-events-none" />
+                <div className="absolute bottom-[-200px] right-[-100px] w-[600px] h-[600px] rounded-full bg-[radial-gradient(circle,rgba(139,92,246,0.12)_0%,transparent_70%)] blur-[40px] pointer-events-none" />
+                
+                {/* Dot grid */}
+                <div className="absolute inset-0 dot-grid opacity-[0.03] pointer-events-none" />
+
+                {/* Top header */}
+                <Link href="/" className="flex items-center gap-2.5 z-10">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--accent-cyan)] to-[var(--accent-purple)] flex items-center justify-center shadow-lg shadow-[var(--accent-cyan)]/25">
+                        <span className="text-white font-bold text-sm">V</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-white">OpenVoice</h1>
-                    <p className="text-gray-400 mt-1">Sign in to your account</p>
+                    <span className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">Voise AI</span>
+                </Link>
+
+                {/* Middle illustration / copy */}
+                <div className="space-y-6 z-10 max-w-md my-auto">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--accent-cyan)]/10 to-[var(--accent-purple)]/10 border border-[var(--border-default)] flex items-center justify-center text-[var(--accent-cyan)] glow-brand">
+                        <Mic className="w-7 h-7" />
+                    </div>
+                    <h2 className="text-3xl font-bold leading-tight">
+                        AI-Powered <span className="text-gradient-brand">Voice Automation</span>
+                    </h2>
+                    <p className="text-[var(--text-secondary)] leading-relaxed">
+                        Log in to manage outbound call agents, payment reminders, lead qualification, and appointment automation.
+                    </p>
+                    
+                    <div className="space-y-3 pt-4">
+                        {[
+                            "AI outbound call agents",
+                            "Payment reminder calls",
+                            "Lead qualification & appointment automation"
+                        ].map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)]">
+                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-cyan)] shadow-[0_0_6px_var(--accent-cyan)]" />
+                                <span>{item}</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Card */}
-                <div className="bg-[#141417] border border-white/10 rounded-2xl p-8">
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {error && (
-                            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">
-                                {error}
-                            </div>
-                        )}
+                {/* Footer info */}
+                <div className="z-10 text-xs text-[var(--text-tertiary)] flex items-center justify-between">
+                    <span>Voise AI</span>
+                    <span>v1.2.0-beta</span>
+                </div>
+            </div>
 
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                                Email
-                            </label>
-                            <input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-4 py-3 bg-[#0f0f10] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                                placeholder="you@example.com"
-                                required
-                            />
+            {/* RIGHT PANEL — Authentication Form */}
+            <div className="flex-1 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-12 relative">
+                {/* Decorative background gradients for mobile */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-[radial-gradient(circle,rgba(0,212,170,0.08)_0%,transparent_70%)] blur-[30px] lg:hidden pointer-events-none" />
+
+                <div className="w-full max-w-[420px] z-10">
+                    {/* Header Logo for Mobile */}
+                    <div className="flex flex-col items-center mb-8 lg:hidden">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--accent-cyan)] to-[var(--accent-purple)] flex items-center justify-center mb-3">
+                            <span className="text-white font-bold text-lg">V</span>
                         </div>
+                        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Voise AI</h1>
+                        <p className="text-[var(--text-secondary)] text-sm mt-1">Sign in to your account</p>
+                    </div>
 
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                                Password
-                            </label>
-                            <input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-4 py-3 bg-[#0f0f10] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                                placeholder="••••••••"
-                                required
-                            />
-                        </div>
+                    <div className="hidden lg:block mb-8">
+                        <h1 className="text-3xl font-bold text-[var(--text-primary)]">Welcome back</h1>
+                        <p className="text-[var(--text-secondary)] mt-2 text-sm">Enter your credentials to manage your voice automation.</p>
+                    </div>
 
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isLoading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                    Signing in...
-                                </span>
-                            ) : (
-                                'Sign In'
+                    {/* Glass form card */}
+                    <div className="glass-card p-8 shadow-xl">
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            {error && (
+                                <div className="bg-[var(--accent-rose)]/10 border border-[var(--accent-rose)]/20 text-[var(--accent-rose)] text-sm rounded-xl p-3.5 font-medium animate-fade">
+                                    {error}
+                                </div>
                             )}
-                        </button>
-                    </form>
 
-                    <div className="mt-6 text-center">
-                        <p className="text-gray-400 text-sm">
-                            Don't have an account?{' '}
-                            <Link href="/register" className="text-blue-400 hover:text-blue-300 transition-colors">
-                                Sign up
-                            </Link>
-                        </p>
+                            <div>
+                                <label htmlFor="email" className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+                                    Email Address
+                                </label>
+                                <input
+                                    id="email"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full px-4 py-3 bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all text-sm"
+                                    placeholder="name@company.com"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label htmlFor="password" className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                                        Password
+                                    </label>
+                                </div>
+                                <input
+                                    id="password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full px-4 py-3 bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all text-sm"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full py-3.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-cyan)]/25 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 active:scale-98"
+                            >
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24" fill="none">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        Authenticating...
+                                    </span>
+                                ) : (
+                                    <>
+                                        Sign In
+                                        <ArrowRight className="w-4 h-4" />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+
+                        <div className="mt-6 pt-6 border-t border-[var(--border-subtle)] text-center">
+                            <p className="text-[var(--text-secondary)] text-sm">
+                                Don't have an account?{' '}
+                                <Link href="/register" className="text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)]/80 font-medium transition-colors">
+                                    Create one free
+                                </Link>
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
