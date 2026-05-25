@@ -47,8 +47,21 @@ async def decide_action(
     )
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
-        
-    return {"status": "processed", "decision": action.status}
+
+    workflow_result = None
+    if data.decision == "approved":
+        from app.services.workflow_service import WorkflowService
+
+        wf_service = WorkflowService(db)
+        workflow_result = await wf_service.advance_on_hitl_decision(
+            action_id, approved=True, organization_id=current_user.organization_id
+        )
+
+    return {
+        "status": "processed",
+        "decision": action.status,
+        "workflow": workflow_result,
+    }
 
 @router.post("/sessions/{session_id}/takeover")
 async def start_takeover(

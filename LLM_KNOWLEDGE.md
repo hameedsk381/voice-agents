@@ -2,6 +2,8 @@
 
 This document is optimized for LLM consumption. It provides a complete, structured view of the project.
 
+**Last updated:** May 2026 · **Workflow automation:** Phase 1 & 2 ✅ — see [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) · **Doc index:** [DOCS.md](./DOCS.md)
+
 ---
 
 ## 1. IDENTITY
@@ -20,7 +22,9 @@ voice-agents/
 │   ├── main.py                       # FastAPI entry point, CORS, health check
 │   ├── requirements.txt              # FastAPI 0.109, SQLAlchemy 2.0, Temporal, OpenAI, etc.
 │   ├── alembic.ini
-│   ├── alembic/                      # 19 migration files
+│   ├── alembic/                      # 24+ migration files
+│   ├── scripts/
+│   │   └── seed_demo_data.py         # Demo user demo@voise.ai / DemoVoise2026!
 │   │   ├── env.py
 │   │   └── versions/                 # Migrations: initial schema → multi-tenancy → memory governance
 │   ├── test_agents_direct.py         # WebSocket agent tests
@@ -36,7 +40,7 @@ voice-agents/
 │       │   ├── logging.py            # Loguru bridge
 │       │   └── redis.py              # Async Redis pool
 │       ├── api/
-│       │   ├── api.py                # Root router, includes 12 endpoint modules
+│       │   ├── api.py                # Root router, includes 14 endpoint modules
 │       │   └── endpoints/
 │       │       ├── auth.py           # Register, login, refresh, user CRUD, admin ops
 │       │       ├── agents.py         # Agent CRUD + version management + pinning
@@ -46,10 +50,12 @@ voice-agents/
 │       │       ├── telephony.py      # Twilio voice webhooks, Ultravox data WS, outbound
 │       │       ├── voices.py         # List, design, clone, delete TTS voices
 │       │       ├── monitoring.py     # Active sessions, session WS stream, global WS stream
-│       │       ├── campaigns.py      # Campaign CRUD + CSV upload + start
+│       │       ├── campaigns.py      # Campaign CRUD + CSV + start (workflow_id optional)
+│       │       ├── workflows.py      # Workflow CRUD, instances, SAP ingest, process-due
 │       │       ├── analytics.py      # Overview, trends, agent perf, shadow stats, call logs
 │       │       ├── hitl.py           # Pending actions, approve/reject, takeover/whisper
-│       │       └── marketplace.py    # Agent templates, install
+│       │       ├── marketplace.py    # Agent templates, install
+│       │       └── ultravox_webhooks.py # Ultravox call.ended webhooks
 │       ├── schemas/                  # Pydantic models
 │       │   ├── agent.py              # AgentCreate, AgentVersion, etc.
 │       │   ├── knowledge.py          # KnowledgeBase, KnowledgeCreate
@@ -57,7 +63,8 @@ voice-agents/
 │       │   ├── policy.py             # ConversationPolicy, State, Transition, Guardrail
 │       │   └── orchestrator.py       # ChatRequest, ChatResponse
 │       ├── models/                   # SQLAlchemy ORM models
-│       │   ├── agent.py              # Agent, AgentVersion, Workflow
+│       │   ├── agent.py              # Agent, AgentVersion
+│       │   ├── workflow.py           # Workflow, WorkflowInstance, EmailMessage
 │       │   ├── user.py               # User + UserRole enum
 │       │   ├── tenant.py             # Organization (multi-tenancy root)
 │       │   ├── memory.py             # MemoryItem, ConversationSummary, UserProfile (with pgvector)
@@ -66,14 +73,26 @@ voice-agents/
 │       │   ├── campaign.py           # Campaign, CampaignContact + enums
 │       │   ├── analytics.py          # CallLog, ShadowLog
 │       │   └── hitl.py              # PendingAction, SessionIntervention
-│       ├── orchestration/            # **THE BRAIN**
-│       │   ├── agent_orchestrator.py # AgentOrchestrator, AgentContext, ConversationFlow, ConfidenceScores
-│       │   ├── agent_swarm.py        # SwarmOrchestrator: LLM-based agent routing + autonomous discovery
-│       │   ├── langgraph_orchestrator.py # LangGraph StateGraph with router + specialist nodes
-│       │   ├── session_manager.py    # Redis-based session persistence (singleton)
-│       │   ├── policy_engine.py      # PolicyEngine: input/output validation, state machine, guardrails
-│       │   ├── tool_planner.py       # ToolPlanner: LLM-based planning before tool execution
-│       │   └── workflows.py          # Temporal workflow definitions (CallWorkflow)
+│       ├── workflows/                # **IN-APP WORKFLOW AUTOMATION (Ph1+2 done)**
+│       │   ├── schema.py             # WorkflowDefinitionV1, NodeType, ConditionRule
+│       │   ├── engine.py             # WorkflowEngine: execute nodes until wait/done
+│       │   ├── templates.py          # collections, lead-qual, appointment templates
+│       │   └── sap_ingest.py         # SAP AR CSV field normalization
+│       ├── orchestration/            # **VOICE SESSION BRAIN**
+│       │   ├── agent_orchestrator.py # AgentOrchestrator, AgentContext, ConfidenceScores
+│       │   ├── turn_processor.py     # Turn pipeline (extracted from monolith)
+│       │   ├── audio_handler.py      # Audio / TTS streaming helpers
+│       │   ├── tool_executor.py      # Tool execution
+│       │   ├── websocket_proxy.py    # WS proxy utilities
+│       │   ├── agent_swarm.py        # SwarmOrchestrator
+│       │   ├── langgraph_orchestrator.py # LangGraph StateGraph
+│       │   ├── session_manager.py    # Redis session persistence
+│       │   ├── policy_engine.py      # PolicyEngine
+│       │   ├── tool_planner.py       # ToolPlanner
+│       │   ├── workflows.py          # Temporal CallWorkflow (telephony lifecycle)
+│       │   ├── workflow_activities.py # Temporal: process_due_workflow_instances (stub wire-up)
+│       │   ├── ultravox_call.py / ultravox_twilio.py # Ultravox + Twilio integration
+│       │   └── worker.py             # Temporal worker
 │       └── services/
 │           ├── llm/
 │           │   ├── base.py           # Abstract LLMProvider
@@ -97,7 +116,9 @@ voice-agents/
 │           ├── memory/
 │           │   └── memory_service.py # MemoryService: memorize, retrieve (semantic), summarize, profile, consent
 │           ├── analytics_service.py  # AnalyticsService: call logs, HMAC signing, outcome classification
-│           ├── campaign_service.py   # CampaignService: CRUD, contacts, start, stats
+│           ├── campaign_service.py   # CampaignService: CRUD, contacts, start (+ workflow instances)
+│           ├── workflow_service.py   # WorkflowService: CRUD, instances, advance, SAP ingest, process-due
+│           ├── email_service.py      # EmailService: SMTP or simulated + email_messages audit
 │           ├── compliance_service.py # PIIRedactor + ComplianceValidator (regex + LLM audit)
 │           ├── hitl_service.py       # HITLService: pending actions, intervention (whisper/takeover)
 │           ├── knowledge_service.py  # KnowledgeService: RAG add/query/delete with embeddings
@@ -108,7 +129,7 @@ voice-agents/
 │           ├── ultravox_service.py   # UltravoxService: API client for Ultravox voice platform
 │           └── voice_ux_service.py   # VoiceUXService: backchannel tokens, latency fillers
 ├── frontend/                         # Next.js 16 + React 19 + Tailwind v4
-│   ├── package.json                  # Next.js 16.1.6, React 19.2.3, livekit, recharts, framer-motion
+│   ├── package.json                  # Next.js 16.1.6, React 19, @xyflow/react, ultravox-client, recharts
 │   ├── next.config.ts
 │   ├── tsconfig.json                 # Path alias @/* → ./src/*
 │   ├── eslint.config.mjs
@@ -127,38 +148,36 @@ voice-agents/
 │       │       │   └── [id]/page.tsx # Agent detail (771 lines): Config, Playground (WS chat), Knowledge Base
 │       │       ├── campaigns/
 │       │       │   ├── page.tsx      # Campaign list with progress cards
-│       │       │   ├── new/page.tsx  # Campaign creation form
-│       │       │   └── [id]/page.tsx # Detail: CSV upload, start/pause, stats, progress bar
-│       │       ├── voices/page.tsx   # Voice Lab: Gallery, Designer (text→preview), Cloner (upload→clone)
-│       │       ├── settings/page.tsx # 4-tab: Telephony, Profile (disabled), Compliance, Billing
-│       │       ├── monitoring/
-│       │       │   ├── page.tsx      # Active sessions list (5s poll)
-│       │       │   └── [session_id]/page.tsx # Live monitor: WS transcript + decision trace sidebar
-│       │       ├── marketplace/page.tsx # Template marketplace with categorized grid
-│       │       ├── logs/page.tsx     # Call log table with expandable detail panel
-│       │       ├── approvals/page.tsx # HITL pending actions: approve/reject
-│       │       └── analytics/page.tsx # Charts: overview, trends, agent performance
+│       │       │   ├── new/page.tsx  # Create + optional workflow_id picker
+│       │       │   └── [id]/page.tsx # CSV upload, start/pause, stats
+│       │       ├── workflows/
+│       │       │   ├── page.tsx      # Workflow list
+│       │       │   ├── new/page.tsx  # Create from template
+│       │       │   └── [id]/page.tsx # Visual · JSON · SAP ingest · Test & runs
+│       │       ├── voices/page.tsx   # Voice Lab
+│       │       ├── settings/page.tsx # Telephony, Profile, Compliance, Billing, Appearance
+│       │       ├── monitoring/ ...
+│       │       ├── marketplace/page.tsx
+│       │       ├── logs/page.tsx
+│       │       ├── approvals/page.tsx
+│       │       └── analytics/page.tsx
 │       ├── components/
-│       │   ├── Navbar.tsx            # Auth-aware nav
-│       │   ├── Hero.tsx              # Landing page hero with animated gradient
-│       │   ├── Features.tsx          # 6-feature grid
-│       │   ├── CTA.tsx              # Call-to-action section
-│       │   ├── Footer.tsx            # Simple footer
-│       │   ├── dashboard/Sidebar.tsx # 10-item nav sidebar
-│       │   └── ui/card.tsx           # Reusable Card primitives (dark theme)
+│       │   ├── workflows/WorkflowCanvas.tsx, WorkflowNodeCard.tsx  # @xyflow/react
+│       │   ├── ThemeToggle.tsx, Stats.tsx, Testimonials.tsx
+│       │   ├── dashboard/Sidebar.tsx # incl. Workflows nav
+│       │   └── ui/card.tsx
 │       ├── contexts/
-│       │   └── AuthContext.tsx       # Auth state: login, register, logout, refreshToken, localStorage
+│       │   ├── AuthContext.tsx
+│       │   └── ThemeContext.tsx      # light | dark | system
 │       └── lib/
-│           └── api.ts               # API client: api.get/post/put/delete + standalone fetchAgents/createAgent/deleteAgent
-├── docker-compose.yml                # Postgres (pgvector:15), Redis 7, Temporal
-├── AGENTS.md                         # Voice agent design philosophy (15 modern agent tenets)
-├── VOICE_PIPELINE.md                 # End-to-end voice pipeline architecture document
-├── ELEVENLABS_GAP_ANALYSIS.md        # Qwen vs ElevenLabs TTS gap analysis
-├── features.md                       # Complete 20-category feature list (~346 lines)
-├── missing_features.md               # Gap analysis vs enterprise platforms (BlueMachine)
-├── prd.md                            # Product Requirements Document
-├── README.md                         # Setup instructions
-└── LLM_KNOWLEDGE.md                  # This file
+│           ├── api-url.ts            # /api/v1 rewrite (browser) or direct backend URL
+│           ├── api.ts
+│           └── workflowFlow.ts
+├── docker-compose.yml
+├── DOCS.md, WORKFLOW_AUTOMATION.md, ARCHITECTURE.md
+├── AGENTS.md, VOICE_PIPELINE.md, features.md, missing_features.md, prd.md
+├── README.md
+└── LLM_KNOWLEDGE.md
 ```
 
 ---
@@ -173,7 +192,7 @@ voice-agents/
 │            CORS (localhost:3000), /health, /                 │
 ├─────────────────────────────────────────────────────────────┤
 │                 API Router (api.py)                          │
-│    12 modules: auth, agents, orchestrator, telephony, ...   │
+│    14 modules: auth, agents, orchestrator, workflows, ...   │
 ├─────────────────────────────────────────────────────────────┤
 │              API Endpoints (endpoints/)                      │
 │    HTTP REST endpoints + 4 WebSocket endpoints              │
@@ -272,7 +291,9 @@ The platform implements all 15 tenets from the design philosophy:
 ### Agent System
 - **Agent** — `id, name, role, persona, organization_id, language, tools (JSON), goals, success_criteria, failure_conditions, exit_actions, config, token_limit, fallback_model, is_active, active_version_id, created_at, updated_at`
 - **AgentVersion** — `id, agent_id, version_number, persona, tools, policy, success_criteria, failure_conditions, exit_actions, token_limit, fallback_model, created_by, change_log, weight (A/B), is_canary`
-- **Workflow** — `id, name, description, definition (JSON graph)`
+- **Workflow** — `id, name, description, category, definition (JSON v1), version, status (draft|active|archived), is_template, template_slug, organization_id, created_by`
+- **WorkflowInstance** — `id, workflow_id, status (running|waiting|completed|failed), current_node_id, context (JSON), wait_until, campaign_id, contact_id, agent_id, outcome, error_message`
+- **EmailMessage** — `id, workflow_instance_id, to_address, template, subject, status (sent|simulated|failed), sent_at`
 
 ### User & Tenant
 - **User** — `id, email, hashed_password, full_name, role (admin|manager|agent|viewer), is_active, is_superuser`
@@ -318,7 +339,8 @@ The platform implements all 15 tenets from the design philosophy:
 | **telephony** | POST /voice (Twilio webhook), POST /voice/{agent_id}, POST /outbound |
 | **voices** | GET /, POST /design, POST /register, DELETE /{id} |
 | **monitoring** | GET /active-sessions, GET /session/{id} |
-| **campaigns** | CRUD + POST /{id}/contacts, POST /{id}/upload-csv, POST /{id}/start |
+| **campaigns** | CRUD + contacts + upload-csv + start (starts workflow instances if workflow_id set) |
+| **workflows** | Templates, CRUD, publish, instances, advance, GET /active, POST /process-due, POST /ingest/sap-csv |
 | **analytics** | GET /overview, GET /daily-trends, GET /agent-performance, GET /shadow-stats, GET /, GET /recent-calls |
 | **hitl** | GET /pending, POST /{id}/decide, POST /sessions/{id}/takeover, POST /sessions/{id}/release, POST /sessions/{id}/respond |
 | **marketplace** | GET /templates, POST /install/{id} |
@@ -351,8 +373,16 @@ POSTGRES_DB=voise
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-# Temporal
+# Temporal (call lifecycle workflows — separate from in-app WorkflowEngine)
 TEMPORAL_HOST=localhost:7233
+
+# Workflow email (optional — simulated if unset)
+# SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_USE_TLS
+
+# Voice runtime
+VOICE_RUNTIME=ultravox
+USE_ULTRAVOX_RUNTIME=true
+ULTRAVOX_API_KEY=...
 
 # API Keys (all optional)
 OPENAI_API_KEY=sk-...
@@ -391,15 +421,15 @@ SERVER_HOST=localhost:8001
 ## 10. FRONTEND KEY FACTS
 
 - **Framework:** Next.js 16 App Router, React 19, TypeScript
-- **Styling:** Tailwind CSS v4, dark theme (#000/#0a0a0b backgrounds)
+- **Styling:** Tailwind CSS v4, light + dark themes (`ThemeContext`, CSS variables in `globals.css`)
+- **API base:** `getApiBaseUrl()` — browser uses `/api/v1` (Next.js rewrite → backend :8001)
 - **State:** Single AuthContext; all other state is local `useState`/`useEffect` per page
 - **Data Fetching:** Direct fetch calls in `useEffect` + polling intervals; no React Query/SWR
 - **Charts:** recharts (AreaChart, BarChart)
 - **Animations:** framer-motion (landing page), CSS animations
-- **Real-time:** Raw WebSocket (no LiveKit usage yet — dependency added but unused)
-- **Audio:** Browser Web Speech API for STT + base64 WAV audio over WebSocket for TTS
-- **No component library** — all UI built from scratch
-- **LiveKit** dependency exists in package.json but is **not currently used** anywhere in the source
+- **Real-time:** WebSocket for playground/monitoring; **ultravox-client** for Ultravox WebRTC playground calls
+- **Workflow UI:** `@xyflow/react` visual graph editor synced with JSON definition
+- **No component library** — custom UI components
 
 ---
 
@@ -440,9 +470,9 @@ Backend runs locally (commented out in compose). Expected on port 8001.
 
 ---
 
-## 13. MIGRATION HISTORY (19 alembic migrations, chronological)
+## 13. MIGRATION HISTORY (24+ alembic migrations, chronological)
 
-1. Initial schema (agents, workflows)
+1. Initial schema (agents, legacy workflows table)
 2. Memory tables with pgvector
 3. Users table
 4. Campaigns
@@ -459,6 +489,26 @@ Backend runs locally (commented out in compose). Expected on port 8001.
 15. Empty migration
 16. HMAC signature on call_logs
 17-19. More organization_id additions + config JSON column + agent_knowledge table
+20. Agent description column
+21. Campaign call_config
+22. **a1b2c3d4e5f6** — workflow automation: workflow_instances, workflow metadata columns
+23. **b2c3d4e5f6a7** — email_messages for workflow email steps
+
+---
+
+## 13b. IN-APP WORKFLOW AUTOMATION (Phase 1 & 2 — Done)
+
+**Not** Temporal `CallWorkflow` — this is a separate JSON-graph engine in `app/workflows/`.
+
+| Piece | Role |
+|-------|------|
+| `WorkflowDefinitionV1` | Nodes: start, condition, voice_call, wait, email, hitl_approval, escalate, end |
+| `WorkflowEngine` | Executes until wait/completed; voice_call uses `CampaignService.dial_contact` |
+| `WorkflowService` | CRUD, `create_instance`, `advance_instance`, `process_due_instances`, `ingest_sap_rows` |
+| Templates | `collections-payment-reminder`, `lead-qualification`, `appointment-confirmation` |
+| Campaign link | `campaign.workflow_id` → `start_campaign()` spawns instance per pending contact |
+
+Full reference: [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md).
 
 ---
 

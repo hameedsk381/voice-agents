@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: voise-redis
+  namespace: voise
+  labels:
+    app.kubernetes.io/name: voise-redis
+    app.kubernetes.io/part-of: voise
+spec:
+  selector:
+    app: voise-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis

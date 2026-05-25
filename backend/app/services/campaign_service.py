@@ -21,16 +21,20 @@ class CampaignService:
         name: str, 
         agent_id: str, 
         user_id: str,
+        organization_id: Optional[str] = None,
         description: str = None,
         concurrency_limit: int = 1,
         retry_config: Dict[str, Any] = None,
         call_config: Dict[str, Any] = None,
+        workflow_id: str = None,
     ) -> Campaign:
         campaign = Campaign(
             name=name,
             agent_id=agent_id,
             description=description,
             created_by=user_id,
+            organization_id=organization_id,
+            workflow_id=workflow_id,
             concurrency_limit=concurrency_limit,
             retry_config=retry_config or {"max_retries": 3, "retry_delay_minutes": 60},
             call_config=call_config or {},
@@ -62,12 +66,17 @@ class CampaignService:
             
         return len(batch)
 
-    async def get_campaign(self, campaign_id: str) -> Optional[Campaign]:
-        return self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    async def get_campaign(self, campaign_id: str, organization_id: Optional[str] = None) -> Optional[Campaign]:
+        q = self.db.query(Campaign).filter(Campaign.id == campaign_id)
+        if organization_id:
+            q = q.filter(Campaign.organization_id == organization_id)
+        return q.first()
 
-    async def list_campaigns(self, user_id: str = None) -> List[Campaign]:
+    async def list_campaigns(self, user_id: str = None, organization_id: Optional[str] = None) -> List[Campaign]:
         query = self.db.query(Campaign)
-        if user_id:
+        if organization_id:
+            query = query.filter(Campaign.organization_id == organization_id)
+        elif user_id:
             query = query.filter(Campaign.created_by == user_id)
         return query.order_by(Campaign.created_at.desc()).all()
 
@@ -87,23 +96,62 @@ class CampaignService:
         
         return {status: count for status, count in stats}
 
-    async def start_campaign(self, campaign_id: str):
-        """Transition campaign to RUNNING status."""
-        campaign = await self.get_campaign(campaign_id)
+    async def start_campaign(self, campaign_id: str, organization_id: Optional[str] = None):
+        """Transition campaign to RUNNING and start linked workflow instances."""
+        campaign = await self.get_campaign(campaign_id, organization_id=organization_id)
         if not campaign:
             raise ValueError("Campaign not found")
             
         campaign.status = CampaignStatus.RUNNING.value
         self.db.commit()
-        
-        # Here we would trigger the Temporal workflow to start processing contacts
-        logger.info(f"Campaign {campaign_id} started")
+
+        instances_started = 0
+        if campaign.workflow_id:
+            from app.services.workflow_service import WorkflowService
+
+            wf_service = WorkflowService(self.db)
+            pending = (
+                self.db.query(CampaignContact)
+                .filter(
+                    CampaignContact.campaign_id == campaign_id,
+                    CampaignContact.status == ContactStatus.PENDING.value,
+                )
+                .all()
+            )
+            for contact in pending:
+                ctx = dict(contact.custom_data or {})
+                ctx.update(
+                    {
+                        "customer_name": contact.contact_name,
+                        "phone_number": contact.phone_number,
+                        "campaign_id": campaign_id,
+                        "contact_id": contact.id,
+                        "agent_id": campaign.agent_id,
+                    }
+                )
+                try:
+                    await wf_service.create_instance(
+                        campaign.workflow_id,
+                        context=ctx,
+                        campaign_id=campaign_id,
+                        contact_id=contact.id,
+                        agent_id=campaign.agent_id,
+                        auto_start=True,
+                    )
+                    contact.status = ContactStatus.QUEUED.value
+                    instances_started += 1
+                except Exception as exc:
+                    logger.warning(f"Workflow start failed for contact {contact.id}: {exc}")
+            self.db.commit()
+
+        logger.info(f"Campaign {campaign_id} started, workflow instances={instances_started}")
         return campaign
 
     async def update_call_config(
-        self, campaign_id: str, call_config: Dict[str, Any]
+        self, campaign_id: str, call_config: Dict[str, Any],
+        organization_id: Optional[str] = None,
     ) -> Optional[Campaign]:
-        campaign = await self.get_campaign(campaign_id)
+        campaign = await self.get_campaign(campaign_id, organization_id=organization_id)
         if not campaign:
             return None
         merged = dict(campaign.call_config or {})
@@ -118,13 +166,14 @@ class CampaignService:
         campaign_id: str,
         contact_id: str,
         from_number: Optional[str] = None,
+        organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Place an outbound Ultravox/Twilio call for one campaign contact."""
         from app.core.config import settings
         import os
         from app.orchestration.ultravox_twilio import create_ultravox_twilio_call
 
-        campaign = await self.get_campaign(campaign_id)
+        campaign = await self.get_campaign(campaign_id, organization_id=organization_id)
         if not campaign:
             raise ValueError("Campaign not found")
 

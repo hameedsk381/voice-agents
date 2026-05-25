@@ -1,9 +1,9 @@
 """
 Marketplace API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import Optional
 
 from app.core import database
 from app.core.deps import get_current_user_required
@@ -12,23 +12,30 @@ from app.services.marketplace_service import MarketplaceService
 
 router = APIRouter()
 
+
 @router.get("/templates")
 async def get_templates(
+    category: Optional[str] = Query(None, description="Filter by category name"),
     current_user: User = Depends(get_current_user_required),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
     service = MarketplaceService(db)
-    return service.get_templates()
+    return service.get_templates(category=category)
+
 
 @router.post("/install/{template_id}")
 async def install_template(
     template_id: str,
     current_user: User = Depends(get_current_user_required),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
     service = MarketplaceService(db)
     try:
-        agent = await service.install_template(template_id, current_user.id)
+        agent = await service.install_template(
+            template_id,
+            current_user.id,
+            organization_id=current_user.organization_id,
+        )
         return {"status": "success", "agent_id": agent.id, "agent_name": agent.name}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

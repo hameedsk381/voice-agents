@@ -14,8 +14,10 @@ from app.orchestration.workflows import (
     synthesize_audio,
     execute_tool_activity,
     transfer_to_human,
-    end_session_activity
+    end_session_activity,
 )
+from app.orchestration.workflow_scheduler import WorkflowDueSchedulerWorkflow
+from app.orchestration.workflow_activities import process_due_workflow_instances_activity
 from app.core.config import settings
 
 
@@ -31,7 +33,7 @@ async def start_worker():
     worker = Worker(
         client,
         task_queue="voice-agent-queue",
-        workflows=[CallWorkflow],
+        workflows=[CallWorkflow, WorkflowDueSchedulerWorkflow],
         activities=[
             initialize_session,
             process_user_input,
@@ -39,8 +41,9 @@ async def start_worker():
             synthesize_audio,
             execute_tool_activity,
             transfer_to_human,
-            end_session_activity
-        ]
+            end_session_activity,
+            process_due_workflow_instances_activity,
+        ],
     )
     
     logger.info("Starting Temporal worker on queue: voice-agent-queue")
@@ -95,6 +98,27 @@ async def get_workflow_status(session_id: str) -> dict:
     return await handle.query(CallWorkflow.get_status)
 
 
+async def ensure_workflow_scheduler(interval_seconds: int = 60) -> None:
+    """Start the due-instance scheduler workflow if not already running."""
+    client = await create_temporal_client()
+    workflow_id = "voise-workflow-due-scheduler"
+    try:
+        handle = client.get_workflow_handle(workflow_id)
+        await handle.describe()
+        logger.info(f"Workflow scheduler already running: {workflow_id}")
+    except Exception:
+        await client.start_workflow(
+            WorkflowDueSchedulerWorkflow.run,
+            interval_seconds,
+            id=workflow_id,
+            task_queue="voice-agent-queue",
+        )
+        logger.info(f"Started workflow scheduler: {workflow_id}")
+
+
 if __name__ == "__main__":
-    # Run worker directly
-    asyncio.run(start_worker())
+    async def _main():
+        await ensure_workflow_scheduler()
+        await start_worker()
+
+    asyncio.run(_main())

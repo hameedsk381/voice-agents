@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Boolean, JSON
+from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 from app.core.database import Base
@@ -17,6 +18,9 @@ class Organization(Base):
     
     # Custom Global Metadata
     settings = Column(JSON, default=dict)
+    
+    # Relationships
+    users = relationship("User", back_populates="organization")
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

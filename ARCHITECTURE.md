@@ -1,5 +1,7 @@
 # Voise AI — Architecture Graphs
 
+> **Workflow automation (Phase 1 & 2 — done):** see [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) for implementation details, API, and operations.
+
 ```mermaid
 ---
 title: System Architecture Layers
@@ -20,6 +22,7 @@ graph TB
             AUTH[/auth/*/]
             AGENTS[/agents/*/]
             CAMPAIGNS[/campaigns/*/]
+            WORKFLOWS[/workflows/*/]
             ANALYTICS[/analytics/*/]
             HITL[/hitl/*/]
             MEMORY[/memory/*/]
@@ -57,6 +60,9 @@ graph TB
             HITLSVC[HITL Service\npending actions · intervention]
             ANALYTICSSVC[Analytics Service\nstats · HMAC signing]
             KNOWLEDGESVC[Knowledge Service\nRAG · embeddings]
+            WFENG[WorkflowEngine\nin-app automation v1]
+            WFSVC[WorkflowService\nCRUD · instances · SAP ingest]
+            EMAILSVC[EmailService\nSMTP or simulated]
             ULTRAVOX[Ultravox Service\nproxy voice runtime]
             VOICEUX[Voice UX Service\nbackchannels · fillers]
         end
@@ -110,6 +116,11 @@ graph TB
     ULTRAVOX --> ULTRAVOX_API
     TELEPHONY --> TWILIO
 
+    REST --> WFENG
+    REST --> WFSVC
+    WFSVC --> WFENG
+    WFENG --> EMAILSVC
+    WFENG --> CAMP_SVC[CampaignService\ndial on voice_call]
     REST --> PG
     REST --> REDIS
     SERVICES --> PG
@@ -222,7 +233,12 @@ erDiagram
 
     Campaign ||--o{ CampaignContact : contains
     Campaign }o--|| Agent : uses
-    Campaign }o--o| Workflow : optional
+    Campaign }o--o| Workflow : optional_automation
+
+    Workflow ||--o{ WorkflowInstance : runs
+    WorkflowInstance }o--o| Campaign : optional
+    WorkflowInstance }o--o| CampaignContact : optional
+    WorkflowInstance ||--o{ EmailMessage : may_send
 
     User ||--o{ PendingAction : processes
     User ||--o{ SessionIntervention : controls
@@ -264,8 +280,14 @@ graph TB
 
         subgraph Campaigns ["Campaigns"]
             CAMP_LIST["/campaigns\nList with progress cards"]
-            CAMP_NEW["/campaigns/new\nCreate form"]
+            CAMP_NEW["/campaigns/new\nCreate + workflow picker"]
             CAMP_DETAIL["/campaigns/[id]\nCSV upload · start/pause · stats"]
+        end
+
+        subgraph Workflows ["Workflows ✅ Ph1+2"]
+            WF_LIST["/workflows\nList · templates"]
+            WF_NEW["/workflows/new\nFrom template"]
+            WF_EDIT["/workflows/[id]\nVisual · JSON · SAP · Test"]
         end
 
         subgraph Monitoring ["Monitoring"]
@@ -275,7 +297,7 @@ graph TB
 
         subgraph Misc ["Other"]
             VOICES["/voices\nVoice Lab · Gallery · Designer · Cloner"]
-            SETTINGS["/settings\nTelephony · Profile · Compliance · Billing"]
+            SETTINGS["/settings\nTelephony · Profile · Compliance · Billing · Appearance"]
             MARKETPLACE["/marketplace\nAgent templates · install"]
             LOGS["/logs\nCall log table · detail panel"]
             APPROVALS["/approvals\nHITL pending · approve/reject"]
@@ -371,3 +393,39 @@ graph TB
     MCP_CLIENT --> EXT2
     MCP_CLIENT --> EXT3
 ```
+
+```mermaid
+---
+title: In-App Workflow Automation (Phase 1 & 2 — Done)
+---
+flowchart TB
+    subgraph Triggers ["Triggers"]
+        T1[Campaign start\nworkflow_id set]
+        T2[SAP CSV ingest\nPOST /workflows/ingest/sap-csv]
+        T3[Manual test instance\nPOST /instances]
+        T4[Cron / Temporal activity\nPOST /process-due]
+    end
+
+    subgraph Engine ["WorkflowEngine"]
+        N1[condition]
+        N2[voice_call → CampaignService.dial]
+        N3[wait → wait_until]
+        N4[email → EmailService]
+        N5[hitl_approval → PendingAction]
+        N6[escalate / end]
+    end
+
+    subgraph Store ["PostgreSQL"]
+        WI[(workflow_instances)]
+        EM[(email_messages)]
+    end
+
+    T1 --> WI
+    T2 --> WI
+    T3 --> WI
+    T4 --> WI
+    WI --> Engine
+    N4 --> EM
+```
+
+See [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) for API and operations.

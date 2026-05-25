@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 from app.services.llm.groq_provider import GroqLLM
 from app.models.agent import Agent
+from app.orchestration.inter_agent_bus import inter_agent_bus
 from sqlalchemy.orm import Session
 from loguru import logger
 
@@ -8,6 +9,7 @@ class SwarmOrchestrator:
     """
     Manages a collection of specialized agents to solve complex tasks.
     The "Brain" that decides which "Hand" to use.
+    Uses InterAgentBus for agent-to-agent communication during delegation.
     """
     
     def __init__(self, db: Session, supervisor_agent: Agent):
@@ -18,6 +20,7 @@ class SwarmOrchestrator:
     async def route_task(self, user_input: str, history: List[Dict[str, str]], pool: List[Agent]) -> Optional[Agent]:
         """
         Analyze input and decide which specialized agent in the pool should handle it.
+        If a specialist is selected, sends the task via InterAgentBus and returns result.
         """
         if not pool:
             return self.supervisor
@@ -45,6 +48,17 @@ Respond with ONLY the ID of the selected agent or "SUPERVISOR".
         for agent in pool:
             if agent.id == selected_id:
                 logger.info(f"Swarm: Delegating task to {agent.name}")
+                # Use InterAgentBus to communicate the delegation
+                try:
+                    reply = await inter_agent_bus.request(
+                        source_agent_id=self.supervisor.id,
+                        target_agent_id=agent.id,
+                        payload={"type": "task_delegation", "task": user_input},
+                        timeout=5.0,
+                    )
+                    logger.debug(f"InterAgentBus reply from {agent.name}: {reply}")
+                except Exception as e:
+                    logger.warning(f"InterAgentBus delegation failed (falling back to direct routing): {e}")
                 return agent
                 
         return self.supervisor
@@ -84,6 +98,15 @@ Respond with ONLY the ID of the selected agent or "SUPERVISOR".
         for a in all_agents:
             if a.id == match_id:
                 logger.info(f"Swarm: Discovered and 'hired' agent {a.name} for capability: {task_query}")
+                # Broadcast discovery via InterAgentBus
+                try:
+                    await inter_agent_bus.send(
+                        source_agent_id=self.supervisor.id,
+                        target_agent_id=a.id,
+                        payload={"type": "agent_hired", "by": self.supervisor.name, "task": task_query},
+                    )
+                except Exception:
+                    pass
                 return a
                 
         return None

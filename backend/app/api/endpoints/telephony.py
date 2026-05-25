@@ -387,21 +387,28 @@ async def ultravox_data_connection(
                     continue
 
                 try:
-                    result = await execute_tool(
+                    result_dict = await execute_tool(
                         tool_name=tool_name,
                         arguments=tool_arguments,
                         db=db,
                         agent_id=agent_id,
                         session_id=session_id,
                     )
-                    await websocket.send_json(
-                        {
-                            "type": result_message_type,
-                            "invocationId": invocation_id,
-                            "result": result,
-                            "responseType": "tool-response",
-                        }
-                    )
+                    result_text = result_dict.get("result", "")
+                    confidence = result_dict.get("confidence", 1.0)
+                    is_error = result_dict.get("error", False)
+
+                    payload = {
+                        "type": result_message_type,
+                        "invocationId": invocation_id,
+                        "result": result_text,
+                        "responseType": "tool-response",
+                    }
+                    if is_error:
+                        payload["errorType"] = "implementation-error"
+                        payload["errorMessage"] = result_text
+
+                    await websocket.send_json(payload)
 
                     if session_id:
                         await monitoring_service.broadcast_event(
@@ -410,8 +417,10 @@ async def ultravox_data_connection(
                             {
                                 "name": tool_name,
                                 "arguments": tool_arguments,
-                                "result": result,
+                                "result": result_text,
+                                "confidence": confidence,
                                 "provider": "ultravox_twilio",
+                                "error": is_error,
                             },
                         )
                 except Exception as tool_error:
@@ -525,6 +534,15 @@ async def make_outbound_call(
     agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
     if not agent:
         return {"status": "error", "error": "Agent not found"}
+
+    # Pre-call limit check
+    from app.services.usage_service import UsageService
+    usage_svc = UsageService(db)
+    call_check = usage_svc.check_call_allowed(agent.organization_id)
+    if not call_check["allowed"]:
+        reason = call_check.get("reason", "limit_exceeded")
+        logger.warning(f"Call blocked for org {agent.organization_id}: {reason}")
+        return {"status": "error", "error": f"Cannot initiate call — {reason.replace('_', ' ')}"}
 
     if _use_ultravox_runtime():
         from_e164 = (

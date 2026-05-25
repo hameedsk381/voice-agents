@@ -7,7 +7,7 @@ class AgentBase(BaseModel):
     role: str
     persona: str
     description: Optional[str] = None
-    language: str = "en-US"
+    language: str = "en-IN"
     tools: Optional[List[Any]] = []
     goals: Optional[List[Any]] = []
     success_criteria: Optional[List[Any]] = []

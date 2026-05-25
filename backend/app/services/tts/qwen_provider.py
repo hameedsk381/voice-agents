@@ -24,7 +24,7 @@ class QwenTTS(TTSProvider):
         data = {
             "text": (None, text),
             "speaker": (None, voice),
-            "language": (None, "Auto"),
+            "language": (None, language),
             "instruct": (None, instruct or "")
         }
 

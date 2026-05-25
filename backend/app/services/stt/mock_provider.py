@@ -1,5 +1,6 @@
 import asyncio
 import os
+from typing import Optional
 
 from app.core.config import settings
 from app.services.stt.base import STTProvider

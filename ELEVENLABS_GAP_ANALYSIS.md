@@ -1,4 +1,6 @@
-# 🎙️ Qwen vs. ElevenLabs: Strategic Gap Analysis
+# Qwen vs. ElevenLabs: Strategic Gap Analysis
+
+> **Context (2026):** Production voice default is **Ultravox**; Qwen applies to the custom/legacy TTS path. See [DOCS.md](./DOCS.md).
 
 This document analyzes the current state of our **Qwen-based** voice stack compared to industry leader **ElevenLabs**, focusing on how we can bridge the quality gap while staying on our own infrastructure.
 

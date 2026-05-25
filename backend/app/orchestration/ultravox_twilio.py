@@ -66,6 +66,16 @@ async def create_ultravox_twilio_call(
     org_id = agent.organization_id
     call_config = (campaign.call_config or {}) if campaign else {}
     greeting = resolve_call_greeting(agent, campaign_call_config=call_config)
+    temperature = call_config.get("temperature")
+    max_duration = call_config.get("max_duration") or call_config.get("maxDuration")
+    recording_enabled = call_config.get("recording_enabled") or call_config.get("recordingEnabled")
+    join_timeout = call_config.get("join_timeout") or call_config.get("joinTimeout")
+    initial_state = call_config.get("initial_state") or call_config.get("initialState")
+    retention_policy = call_config.get("retention_policy") or call_config.get("retentionPolicy")
+    tools_remove = call_config.get("tools_remove") or call_config.get("toolsRemove")
+    tools_replace = call_config.get("tools_replace") or call_config.get("toolsReplace")
+    deferred_messages = call_config.get("deferred_messages") or call_config.get("deferredMessages")
+    prior_call_id = call_config.get("prior_call_id") or call_config.get("priorCallId")
 
     metadata: Dict[str, str] = {
         "agent_id": str(agent.id),
@@ -133,6 +143,16 @@ async def create_ultravox_twilio_call(
             greeting=greeting,
             outgoing_to=outgoing_to,
             outgoing_from=outgoing_from,
+            temperature=temperature,
+            max_duration=max_duration,
+            recording_enabled=recording_enabled,
+            join_timeout=join_timeout,
+            initial_state=initial_state,
+            retention_policy=retention_policy,
+            tools_remove=tools_remove,
+            tools_replace=tools_replace,
+            deferred_messages=deferred_messages,
+            prior_call_id=prior_call_id,
         )
     except Exception:
         ULTRAVOX_DATA_CONNECTION_CONTEXT.pop(token, None)

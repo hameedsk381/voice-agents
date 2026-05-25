@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import Link from 'next/link';
-import { Phone, User, Clock, Activity } from 'lucide-react';
+import { Phone, User, Clock, Activity, Loader2, Radio } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface ActiveSession {
     session_id: string;
@@ -39,74 +41,119 @@ export default function MonitoringPage() {
 
     return (
         <div className="space-y-6">
+            {/* Page Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 select-none">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                        Live <span className="text-gradient-brand">Monitoring</span>
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                        Live{' '}
+                        <span className="text-primary">
+                            Monitoring
+                        </span>
                     </h2>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">Supervise ongoing conversational sessions and monitor latency in real-time.</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Supervise ongoing conversational sessions and monitor latency in real-time.
+                    </p>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent-emerald)]/10 border border-[var(--accent-emerald)]/20 text-[var(--accent-emerald)] text-xs font-bold uppercase tracking-wider">
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 text-xs font-semibold uppercase tracking-wider">
                     <Activity className="w-3.5 h-3.5 animate-pulse" />
-                    <span>{sessions.length} Active Calls</span>
-                </div>
+                    {sessions.length} Active Calls
+                </span>
             </div>
 
+            {/* Content */}
             {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-48 glass-card animate-pulse" />
+                        <Card key={i} className="h-48 animate-pulse">
+                            <CardContent className="p-5">
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="size-10 rounded-lg bg-muted" />
+                                        <div className="w-16 h-5 rounded-full bg-muted" />
+                                    </div>
+                                    <div className="space-y-2 mt-4">
+                                        <div className="w-3/4 h-4 rounded bg-muted" />
+                                        <div className="w-1/2 h-3 rounded bg-muted" />
+                                        <div className="w-2/3 h-3 rounded bg-muted" />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
                     ))}
                 </div>
             ) : sessions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-default)] rounded-2xl text-center">
-                    <Phone className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
-                    <h3 className="text-xs font-bold text-[var(--text-primary)]">No Active Calls</h3>
-                    <p className="text-[10px] text-[var(--text-tertiary)] mt-1 max-w-xs leading-relaxed">There are currently no ongoing conversational sessions to monitor.</p>
-                </div>
+                <Card className="border-dashed">
+                    <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="bg-primary/10 rounded-lg p-3 mb-4">
+                            <Phone className="size-8 text-primary" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-foreground">No Active Calls</h3>
+                        <p className="text-xs text-muted-foreground mt-1.5 max-w-xs leading-relaxed">
+                            There are currently no ongoing conversational sessions to monitor.
+                        </p>
+                        <Button variant="outline" size="sm" className="mt-4" onClick={fetchSessions}>
+                            <Activity className="w-3.5 h-3.5 mr-1.5" />
+                            Refresh
+                        </Button>
+                    </CardContent>
+                </Card>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {sessions.map((session) => (
                         <Link
                             key={session.session_id}
                             href={`/dashboard/monitoring/${session.session_id}`}
                             className="group block"
                         >
-                            <div className="glass-card p-5 group flex flex-col justify-between h-full hover:border-[var(--border-active)] transition-all relative">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-2.5 rounded-xl bg-[var(--bg-overlay)] border border-[var(--border-subtle)] text-[var(--text-secondary)] group-hover:scale-105 transition-all">
-                                        <Phone className="w-4.5 h-4.5" />
+                            <Card className="hover:shadow-md transition-all h-full">
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-start justify-between">
+                                        <div className="bg-primary/10 rounded-lg p-2.5 group-hover:scale-105 transition-transform">
+                                            <Phone className="size-4 text-primary" />
+                                        </div>
+                                        <span
+                                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                session.status === 'escalated'
+                                                    ? 'bg-red-500/10 text-red-600 border border-red-500/20'
+                                                    : 'bg-green-500/10 text-green-600 border border-green-500/20'
+                                            }`}
+                                        >
+                                            {session.status}
+                                        </span>
                                     </div>
-                                    <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${
-                                        session.status === 'escalated' 
-                                            ? 'bg-[var(--accent-rose)]/10 text-[var(--accent-rose)] border-[var(--accent-rose)]/25' 
-                                            : 'bg-[var(--accent-emerald)]/10 text-[var(--accent-emerald)] border-[var(--accent-emerald)]/25'
-                                    }`}>
-                                        {session.status}
-                                    </div>
-                                </div>
+                                </CardHeader>
 
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-primary)]">
-                                        <User className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                                        <span className="truncate">{session.caller_id || 'Anonymous Caller'}</span>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                                            <User className="w-3.5 h-3.5 text-muted-foreground" />
+                                            <span className="truncate">
+                                                {session.caller_id || 'Anonymous Caller'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Clock className="w-3.5 h-3.5" />
+                                            <span>
+                                                Started{' '}
+                                                {new Date(session.created_at).toLocaleTimeString()}
+                                            </span>
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground font-mono truncate">
+                                            ID: {session.session_id.slice(0, 12)}...
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                                        <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                                        <span>Started {new Date(session.created_at).toLocaleTimeString()}</span>
-                                    </div>
-                                    <div className="text-[10px] text-[var(--text-tertiary)] font-mono truncate">
-                                        ID: {session.session_id.slice(0, 12)}...
-                                    </div>
-                                </div>
 
-                                <div className="mt-5 flex items-center justify-between text-xs pt-4 border-t border-[var(--border-subtle)]">
-                                    <span className="text-[var(--text-secondary)] font-medium">Listen Live</span>
-                                    <div className="w-7 h-7 rounded-full bg-[var(--bg-overlay)] border border-[var(--border-subtle)] flex items-center justify-center group-hover:bg-gradient-to-r group-hover:from-[var(--accent-cyan)] group-hover:to-[var(--accent-purple)] group-hover:text-[var(--text-primary)] transition-all">
-                                        <Activity className="w-3.5 h-3.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
+                                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                                        <Button variant="outline" size="sm" className="text-xs">
+                                            <Radio className="w-3.5 h-3.5 mr-1.5" />
+                                            Listen Live
+                                        </Button>
+                                        <div className="size-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-all">
+                                            <Activity className="w-3.5 h-3.5" />
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
+                                </CardContent>
+                            </Card>
                         </Link>
                     ))}
                 </div>

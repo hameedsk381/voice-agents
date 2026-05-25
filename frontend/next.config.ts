@@ -1,16 +1,17 @@
 import type { NextConfig } from "next";
 
-const backendUrl = (process.env.BACKEND_URL || "http://localhost:8001").replace(
-  /\/$/,
-  ""
-);
-
 const nextConfig: NextConfig = {
-  async rewrites() {
+  skipTrailingSlashRedirect: true,
+  env: {
+    BACKEND_URL: process.env.BACKEND_URL || "http://localhost:8001",
+  },
+  async headers() {
     return [
       {
-        source: "/api/v1/:path*",
-        destination: `${backendUrl}/api/v1/:path*`,
+        source: "/((?!_next/static|favicon).*)",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
       },
     ];
   },

@@ -23,6 +23,8 @@ from app.orchestration.session_manager import session_manager
 from app.services.monitoring_service import monitoring_service
 from app.services.hitl_service import HITLService
 from app.services.tools.registry import get_tool_schemas
+from app.services.agent_registry_service import AgentRegistryService
+from app.orchestration.inter_agent_bus import inter_agent_bus
 
 # Import modular components
 from app.orchestration.websocket_proxy import run_ultravox_proxy_session, is_ultravox_runtime
@@ -98,6 +100,131 @@ def _resolve_agent_config(agent, db, agent_id: str):
     return active_persona, active_tools or [], active_policy
 
 
+def _resolve_agent_by_id_or_capability(
+    db: Session, agent_id: Optional[str], capability: Optional[str]
+) -> models.Agent:
+    """Resolve an agent by direct ID or by registry capability discovery."""
+    if capability:
+        svc = AgentRegistryService(db)
+        agent = svc.find_agent_for_capability(capability)
+        if not agent:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active agent found for capability '{capability}'",
+            )
+        return agent
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="Either agent_id or capability is required")
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agent
+
+
+async def _create_ultravox_join(
+    agent: models.Agent,
+    db: Session,
+    body: UltravoxJoinRequest,
+) -> UltravoxJoinResponse:
+    """Shared Ultravox call creation logic used by both agent_id and capability endpoints."""
+    agent_id = agent.id
+    active_persona, active_tools, _ = _resolve_agent_config(agent, db, agent_id)
+
+    # Pre-call limit check
+    from app.services.usage_service import UsageService
+    usage_svc = UsageService(db)
+    call_check = usage_svc.check_call_allowed(agent.organization_id)
+    if not call_check["allowed"]:
+        reason = call_check.get("reason", "limit_exceeded")
+        logger.warning(f"Call blocked for org {agent.organization_id}: {reason}")
+        raise HTTPException(status_code=402, detail=f"Cannot initiate call — {reason.replace('_', ' ')}")
+
+    session_language = body.language or agent.language or "en-US"
+    agent_config = agent.config or {}
+    selected_voice = body.voice or agent_config.get("voice")
+    if not selected_voice or selected_voice == "auto":
+        selected_voice = settings.ULTRAVOX_VOICE
+
+    from app.orchestration.ultravox_call import build_template_context, resolve_call_greeting
+    from app.services.ultravox_agent_sync import (
+        ensure_ultravox_agent_id,
+        start_ultravox_call_for_agent,
+    )
+    from app.services.identity_service import IdentityService
+
+    # Attach agent identity (SPIFFE ID) to call metadata
+    identity_svc = IdentityService(db)
+    identity = identity_svc.get_identity(agent_id)
+    spiffe_id = identity.spiffe_id if identity else None
+
+    metadata = {
+        "agent_id": agent_id,
+        "org_id": agent.organization_id or "",
+        "channel": "browser_sdk",
+        "spiffe_id": spiffe_id,
+    }
+    template_context = build_template_context(agent, caller_id=body.caller_id, language=session_language)
+
+    ultravox_agent_id = await ensure_ultravox_agent_id(
+        agent, db, active_persona=active_persona, language=session_language, voice=selected_voice,
+    )
+
+    greeting = resolve_call_greeting(agent)
+
+    if ultravox_agent_id:
+        call = await start_ultravox_call_for_agent(
+            agent, ultravox_agent_id=ultravox_agent_id,
+            template_context=template_context, metadata=metadata,
+            tools=active_tools, tool_implementation="client", greeting=greeting,
+            temperature=body.temperature,
+            max_duration=body.max_duration,
+            recording_enabled=body.recording_enabled,
+            join_timeout=body.join_timeout,
+            initial_messages=body.initial_messages,
+            initial_state=body.initial_state,
+            deferred_messages=body.deferred_messages,
+            prior_call_id=body.prior_call_id,
+        )
+    else:
+        selected_tools = build_ultravox_selected_tools(active_tools, implementation="client")
+        system_prompt = build_system_prompt(agent, active_persona, session_language)
+        call = await ultravox_service.create_browser_call(
+            system_prompt=system_prompt, voice=selected_voice,
+            metadata=metadata, selected_tools=selected_tools,
+            initial_state=body.initial_state or {"agent_id": agent_id, "organization_id": agent.organization_id},
+        )
+
+    join_url = call.get("joinUrl")
+    call_id = call.get("callId") or str(uuid.uuid4())
+    logger.info(f"Ultravox joinUrl: {join_url}")
+    if not join_url:
+        raise HTTPException(status_code=502, detail="Ultravox did not return joinUrl")
+
+    session_id = call_id
+    await session_manager.create_session(
+        session_id=session_id, agent_id=agent_id,
+        caller_id=body.caller_id,
+        metadata={
+            "channel": "ultravox_sdk", "org_id": agent.organization_id,
+            "floor_owner": "user", "provider": "ultravox",
+            "ultravox_call_id": call_id,
+        },
+    )
+    await session_manager.link_ultravox_call_id(session_id, call_id)
+
+    await monitoring_service.broadcast_event(session_id, "session_start", {
+        "agent_id": agent_id, "agent_name": agent.name, "provider": "ultravox_sdk",
+    })
+
+    return UltravoxJoinResponse(
+        join_url=join_url, call_id=call_id, session_id=session_id,
+        agent_id=agent_id, agent_name=agent.name,
+        voice=selected_voice, language=session_language,
+        tool_names=extract_agent_tool_names(active_tools),
+        ultravox_agent_id=ultravox_agent_id,
+    )
+
+
 @router.post("/ultravox/join/{agent_id}", response_model=UltravoxJoinResponse)
 async def ultravox_join_call(
     agent_id: str,
@@ -105,116 +232,47 @@ async def ultravox_join_call(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """
-    Create an Ultravox call and return joinUrl for the browser client SDK (WebRTC).
-    See https://docs.ultravox.ai/apps/sdks
-    """
+    """Create an Ultravox call by agent_id and return joinUrl."""
     if not is_ultravox_runtime():
-        raise HTTPException(
-            status_code=503,
-            detail="Ultravox is not configured. Set ULTRAVOX_API_KEY and VOICE_RUNTIME=ultravox.",
-        )
+        raise HTTPException(status_code=503, detail="Ultravox is not configured.")
 
     body = body or UltravoxJoinRequest()
+    agent = _resolve_agent_by_id_or_capability(db, agent_id, body.capability if body else None)
+    return await _create_ultravox_join(agent, db, body)
 
-    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
 
-    active_persona, active_tools, _ = _resolve_agent_config(agent, db, agent_id)
-    session_language = (body.language if body else None) or agent.language or "en-US"
-    agent_config = agent.config or {}
-    selected_voice = (body.voice if body else None) or agent_config.get("voice")
-    if not selected_voice or selected_voice == "auto":
-        selected_voice = settings.ULTRAVOX_VOICE
+@router.post("/ultravox/join-by-capability/{capability}", response_model=UltravoxJoinResponse)
+async def ultravox_join_by_capability(
+    capability: str,
+    body: UltravoxJoinRequest = None,
+    db: Session = Depends(database.get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Create an Ultravox call by discovering the best agent for a given capability."""
+    if not is_ultravox_runtime():
+        raise HTTPException(status_code=503, detail="Ultravox is not configured.")
 
-    from app.orchestration.ultravox_call import build_template_context
-    from app.orchestration.ultravox_call import resolve_call_greeting
-    from app.services.ultravox_agent_sync import (
-        ensure_ultravox_agent_id,
-        start_ultravox_call_for_agent,
-    )
+    body = body or UltravoxJoinRequest()
+    agent = _resolve_agent_by_id_or_capability(db, None, capability)
+    return await _create_ultravox_join(agent, db, body)
 
-    metadata = {
-        "agent_id": agent_id,
-        "org_id": agent.organization_id or "",
-        "channel": "browser_sdk",
-    }
-    template_context = build_template_context(
-        agent,
-        caller_id=body.caller_id,
-        language=session_language,
-    )
 
-    ultravox_agent_id = await ensure_ultravox_agent_id(
-        agent,
-        db,
-        active_persona=active_persona,
-        active_tools=active_tools,
-        language=session_language,
-        voice=selected_voice,
-    )
-
-    greeting = resolve_call_greeting(agent)
-
-    if ultravox_agent_id:
-        call = await start_ultravox_call_for_agent(
-            agent,
-            ultravox_agent_id=ultravox_agent_id,
-            template_context=template_context,
-            metadata=metadata,
-            tools=active_tools,
-            tool_implementation="client",
-            greeting=greeting,
-        )
-    else:
-        selected_tools = build_ultravox_selected_tools(active_tools, implementation="client")
-        system_prompt = build_system_prompt(agent, active_persona, session_language)
-        call = await ultravox_service.create_browser_call(
-            system_prompt=system_prompt,
-            voice=selected_voice,
-            metadata=metadata,
-            selected_tools=selected_tools,
-            initial_state={"agent_id": agent_id, "organization_id": agent.organization_id},
-        )
-
-    join_url = call.get("joinUrl")
-    call_id = call.get("callId") or str(uuid.uuid4())
-    if not join_url:
-        raise HTTPException(status_code=502, detail="Ultravox did not return joinUrl")
-
-    session_id = call_id
-    await session_manager.create_session(
-        session_id=session_id,
+@router.get("/ultravox/calls")
+async def ultravox_list_calls(
+    agent_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user_required),
+):
+    """List Ultravox calls for the organization, optionally filtered by agent."""
+    if not is_ultravox_runtime():
+        raise HTTPException(status_code=503, detail="Ultravox is not configured.")
+    calls = await ultravox_service.list_calls(
         agent_id=agent_id,
-        caller_id=body.caller_id if body else None,
-        metadata={
-            "channel": "ultravox_sdk",
-            "org_id": agent.organization_id,
-            "floor_owner": "user",
-            "provider": "ultravox",
-            "ultravox_call_id": call_id,
-        },
+        limit=limit,
+        offset=offset,
     )
-    await session_manager.link_ultravox_call_id(session_id, call_id)
-
-    await monitoring_service.broadcast_event(session_id, "session_start", {
-        "agent_id": agent_id,
-        "agent_name": agent.name,
-        "provider": "ultravox_sdk",
-    })
-
-    return UltravoxJoinResponse(
-        join_url=join_url,
-        call_id=call_id,
-        session_id=session_id,
-        agent_id=agent_id,
-        agent_name=agent.name,
-        voice=selected_voice,
-        language=session_language,
-        tool_names=extract_agent_tool_names(active_tools),
-        ultravox_agent_id=ultravox_agent_id,
-    )
+    return {"calls": calls, "total": len(calls)}
 
 
 @router.post("/ultravox/tools/{tool_name}")
@@ -590,9 +648,9 @@ async def chat_endpoint(request: ChatRequest, db: Session = Depends(database.get
     )
 
 @router.get("/voices")
-async def get_voices():
+async def get_voices(primaryLanguage: Optional[str] = None):
     """Proxy to get available voices from active voice runtime provider."""
     if is_ultravox_runtime():
-        return await ultravox_service.list_voices()
+        return await ultravox_service.list_voices(primaryLanguage=primaryLanguage)
     from app.orchestration.turn_processor import tts_service
     return await tts_service.get_voices()

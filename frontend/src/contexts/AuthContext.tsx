@@ -8,6 +8,7 @@ interface User {
     email: string;
     full_name: string | null;
     role: string;
+    organization_id: string | null;
     is_active: boolean;
 }
 
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
-    const logout = useCallback(async () => {
+    const logout = useCallback(async (redirect = true) => {
         try {
             await fetch(`${getApiBaseUrl()}/auth/logout`, {
                 method: 'POST',
@@ -41,7 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error('Failed to logout on server:', error);
         }
         setUser(null);
-        router.push('/login');
+        if (redirect) {
+            router.push('/login');
+        }
     }, [router]);
 
     const refreshPromiseRef = React.useRef<Promise<boolean> | null>(null);
@@ -73,11 +76,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         return true;
                     }
                 }
-                await logout();
+                await logout(false);
                 return false;
             } catch (error) {
                 console.error('Failed to refresh token:', error);
-                await logout();
+                await logout(false);
                 return false;
             } finally {
                 refreshPromiseRef.current = null;
@@ -103,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (error) {
             console.error('Failed to fetch user:', error);
-            await logout();
+            await logout(false);
         } finally {
             setIsLoading(false);
         }
@@ -200,8 +203,8 @@ export function withAuth<P extends object>(Component: React.ComponentType<P>) {
 
         if (isLoading) {
             return (
-                <div className="min-h-screen flex items-center justify-center bg-[#0a0a0b]">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                <div className="min-h-screen flex items-center justify-center bg-background">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
                 </div>
             );
         }

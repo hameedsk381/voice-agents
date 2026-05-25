@@ -1,56 +1,271 @@
-from .base import BaseTool
 import random
 from datetime import datetime, timedelta
+from .base import BaseTool, ToolResult
 
-class GetOrderStatusTool(BaseTool):
-    name = "get_order_status"
-    description = "Get the current status of a customer's order by order ID or phone number."
+
+class VerifyAadhaarTool(BaseTool):
+    name = "verify_aadhaar"
+    description = "Verify the last 4 digits of an Aadhaar number against the registered mobile number for identity confirmation."
     parameters = {
         "type": "object",
         "properties": {
-            "order_id": {
+            "aadhaar_last4": {
                 "type": "string",
-                "description": "The order ID to look up"
+                "description": "Last 4 digits of the Aadhaar number"
             },
-            "phone_number": {
+            "registered_mobile": {
                 "type": "string",
-                "description": "Customer phone number to look up orders"
+                "description": "Registered mobile number (10 digits)"
+            }
+        },
+        "required": ["aadhaar_last4"]
+    }
+    cost_per_call = 0.5
+
+    async def execute(self, aadhaar_last4: str = None, registered_mobile: str = None) -> ToolResult:
+        if not aadhaar_last4 or len(aadhaar_last4) != 4 or not aadhaar_last4.isdigit():
+            return ToolResult(
+                result="Please provide a valid 4-digit Aadhaar suffix.",
+                confidence=1.0
+            )
+        # Simulated OTP-based verification
+        verified = random.random() > 0.2  # 80% simulated success
+        if verified:
+            return ToolResult(
+                result=f"Aadhaar ending with {aadhaar_last4} verified successfully.",
+                confidence=0.95,
+                metadata={"verified": True, "method": "otp"}
+            )
+        return ToolResult(
+            result=f"Could not verify Aadhaar ending with {aadhaar_last4}. The details may not match our records.",
+            confidence=0.7,
+            metadata={"verified": False}
+        )
+
+
+class VerifyPANCardTool(BaseTool):
+    name = "verify_pan"
+    description = "Verify an Indian PAN card number and check its validity status with the income tax department."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "pan_number": {
+                "type": "string",
+                "description": "The 10-character PAN card number (e.g., ABCDE1234F)"
+            }
+        },
+        "required": ["pan_number"]
+    }
+    cost_per_call = 0.3
+
+    async def execute(self, pan_number: str) -> ToolResult:
+        pan = (pan_number or "").upper().strip()
+        if len(pan) != 10 or not pan[:5].isalpha() or not pan[5:9].isdigit() or not pan[9].isalpha():
+            return ToolResult(
+                result="Invalid PAN format. A valid PAN has 10 characters: first 5 letters, next 4 digits, last 1 letter (e.g., ABCDE1234F).",
+                confidence=1.0
+            )
+        # Simulated PAN verification
+        return ToolResult(
+            result=f"PAN {pan} is active and valid as per income tax records.",
+            confidence=0.9,
+            metadata={"pan_status": "active", "pan_category": pan[3]}
+        )
+
+
+class CheckUPIPaymentTool(BaseTool):
+    name = "check_upi_payment"
+    description = "Check the status of a UPI transaction by UPI transaction ID or reference number."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "transaction_id": {
+                "type": "string",
+                "description": "UPI transaction ID or reference number"
+            },
+            "upi_id": {
+                "type": "string",
+                "description": "UPI ID (e.g., name@upi) to check recent transactions"
             }
         },
         "required": []
     }
-    
-    async def execute(self, order_id: str = None, phone_number: str = None) -> str:
-        # Simulated order lookup
-        statuses = ["Processing", "Shipped", "Out for Delivery", "Delivered"]
-        status = random.choice(statuses)
-        eta = (datetime.now() + timedelta(days=random.randint(1, 5))).strftime("%B %d, %Y")
-        
-        if order_id:
-            return f"Order {order_id} is currently '{status}'. Expected delivery: {eta}."
-        elif phone_number:
-            return f"Found 1 order for {phone_number}. Status: '{status}'. Expected delivery: {eta}."
-        return "Please provide an order ID or phone number."
+    cost_per_call = 0.2
+
+    async def execute(self, transaction_id: str = None, upi_id: str = None) -> ToolResult:
+        statuses = ["Success", "Pending", "Failed", "Refunded"]
+        status = random.choices(statuses, weights=[65, 15, 15, 5])[0]
+        amount = round(random.uniform(100, 50000), 2)
+
+        if transaction_id:
+            if status == "Success":
+                return ToolResult(
+                    result=f"UPI transaction {transaction_id} of ₹{amount:,.2f} completed successfully.",
+                    confidence=0.98,
+                    metadata={"status": status, "amount": amount}
+                )
+            return ToolResult(
+                result=f"UPI transaction {transaction_id} is currently {status}. Amount: ₹{amount:,.2f}.",
+                confidence=0.85,
+                metadata={"status": status, "amount": amount}
+            )
+        elif upi_id:
+            return ToolResult(
+                result=f"Found {random.randint(1, 5)} recent transactions for {upi_id}. Last transaction: ₹{amount:,.2f} ({status}).",
+                confidence=0.8,
+                metadata={"upi_id": upi_id, "recent_status": status}
+            )
+        return ToolResult(
+            result="Please provide a UPI transaction ID or UPI ID to check payment status.",
+            confidence=1.0
+        )
 
 
-class CheckAccountBalanceTool(BaseTool):
-    name = "check_account_balance"
-    description = "Check the account balance for a customer."
+class LookupPincodeTool(BaseTool):
+    name = "lookup_pincode"
+    description = "Look up Indian pincode details including city, district, and state."
     parameters = {
         "type": "object",
         "properties": {
-            "account_id": {
+            "pincode": {
                 "type": "string",
-                "description": "The account ID or customer ID"
+                "description": "6-digit Indian pincode"
             }
         },
-        "required": ["account_id"]
+        "required": ["pincode"]
     }
-    
-    async def execute(self, account_id: str) -> str:
-        # Simulated balance check
-        balance = round(random.uniform(100, 10000), 2)
-        return f"Account {account_id} has a current balance of ${balance:,.2f}."
+    cost_per_call = 0.1
+
+    async def execute(self, pincode: str) -> ToolResult:
+        pin = (pincode or "").strip()
+        if len(pin) != 6 or not pin.isdigit():
+            return ToolResult(
+                result="Invalid pincode. A valid Indian pincode has exactly 6 digits.",
+                confidence=1.0
+            )
+        # Simulated pincode DB
+        cities = {
+            "110": {"city": "New Delhi", "state": "Delhi"},
+            "400": {"city": "Mumbai", "state": "Maharashtra"},
+            "560": {"city": "Bengaluru", "state": "Karnataka"},
+            "600": {"city": "Chennai", "state": "Tamil Nadu"},
+            "700": {"city": "Kolkata", "state": "West Bengal"},
+            "500": {"city": "Hyderabad", "state": "Telangana"},
+            "380": {"city": "Ahmedabad", "state": "Gujarat"},
+            "302": {"city": "Jaipur", "state": "Rajasthan"},
+            "226": {"city": "Lucknow", "state": "Uttar Pradesh"},
+            "800": {"city": "Patna", "state": "Bihar"},
+        }
+        prefix = pin[:3]
+        if prefix in cities:
+            info = cities[prefix]
+            return ToolResult(
+                result=f"Pincode {pin}: {info['city']}, District: {info['city']}, State: {info['state']}.",
+                confidence=0.95,
+                metadata={"city": info["city"], "state": info["state"]}
+            )
+        return ToolResult(
+            result=f"Pincode {pin} is a valid Indian pincode but details could not be found in our database.",
+            confidence=0.5,
+            metadata={"pincode": pin}
+        )
+
+
+class CheckGSTTool(BaseTool):
+    name = "check_gst"
+    description = "Look up GST registration details for an Indian business using its GSTIN."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "gstin": {
+                "type": "string",
+                "description": "15-character GST Identification Number (GSTIN)"
+            }
+        },
+        "required": ["gstin"]
+    }
+    cost_per_call = 0.4
+
+    async def execute(self, gstin: str) -> ToolResult:
+        gst = (gstin or "").upper().strip()
+        if len(gst) != 15:
+            return ToolResult(
+                result="Invalid GSTIN. A valid GSTIN has 15 characters.",
+                confidence=1.0
+            )
+        # Simulated GST lookup
+        return ToolResult(
+            result=f"GSTIN {gst} is active. Business name: (simulated) Trading Co. Pvt. Ltd. Status: Registered and compliant.",
+            confidence=0.85,
+            metadata={"gstin": gst, "status": "active"}
+        )
+
+
+class TranslateToHindiTool(BaseTool):
+    name = "translate_to_hindi"
+    description = "Translate English text to Hindi in real-time for bilingual conversations with Indian users."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "text": {
+                "type": "string",
+                "description": "English text to translate to Hindi"
+            }
+        },
+        "required": ["text"]
+    }
+    cost_per_call = 0.05
+
+    async def execute(self, text: str) -> ToolResult:
+        # Simulated Hindi translation
+        return ToolResult(
+            result=f"हिंदी अनुवाद: {text} (Simulated Hindi translation of the provided text.)",
+            confidence=0.8,
+            metadata={"source_language": "en", "target_language": "hi"}
+        )
+
+
+class CheckLoanEMITool(BaseTool):
+    name = "check_loan_emi"
+    description = "Calculate monthly EMI for a loan amount with Indian interest rates and tenure options."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "loan_amount": {
+                "type": "number",
+                "description": "Principal loan amount in rupees"
+            },
+            "interest_rate": {
+                "type": "number",
+                "description": "Annual interest rate in percentage (e.g., 10.5 for 10.5%)"
+            },
+            "tenure_months": {
+                "type": "number",
+                "description": "Loan tenure in months"
+            }
+        },
+        "required": ["loan_amount", "interest_rate", "tenure_months"]
+    }
+    cost_per_call = 0.1
+
+    async def execute(self, loan_amount: float, interest_rate: float, tenure_months: float) -> ToolResult:
+        if loan_amount <= 0 or interest_rate <= 0 or tenure_months <= 0:
+            return ToolResult(
+                result="Loan amount, interest rate, and tenure must be positive values.",
+                confidence=1.0
+            )
+        monthly_rate = interest_rate / 12 / 100
+        emi = loan_amount * monthly_rate * (1 + monthly_rate) ** tenure_months / ((1 + monthly_rate) ** tenure_months - 1)
+        total_payment = emi * tenure_months
+        total_interest = total_payment - loan_amount
+
+        return ToolResult(
+            result=f"For a loan of ₹{loan_amount:,.2f} at {interest_rate}% for {int(tenure_months)} months: "
+                   f"Monthly EMI: ₹{emi:,.2f}, Total Interest: ₹{total_interest:,.2f}, "
+                   f"Total Payment: ₹{total_payment:,.2f}.",
+            confidence=0.99,
+            metadata={"emi": round(emi, 2), "total_interest": round(total_interest, 2), "total_payment": round(total_payment, 2)}
+        )
 
 
 class ScheduleCallbackTool(BaseTool):
@@ -61,141 +276,111 @@ class ScheduleCallbackTool(BaseTool):
         "properties": {
             "preferred_time": {
                 "type": "string",
-                "description": "The preferred time for callback (e.g., 'tomorrow at 2pm', 'in 1 hour')"
+                "description": "Preferred callback time in IST (e.g., 'tomorrow at 2pm', 'in 1 hour')"
             },
             "reason": {
                 "type": "string",
-                "description": "Brief reason for the callback request"
+                "description": "Brief reason for the callback (e.g., 'loan inquiry', 'account issue')"
             }
         },
         "required": ["preferred_time"]
     }
-    
-    async def execute(self, preferred_time: str, reason: str = "General inquiry") -> str:
-        return f"Callback scheduled for {preferred_time}. Reason: {reason}. A human agent will call you back."
+    cost_per_call = 0.0
+
+    async def execute(self, preferred_time: str, reason: str = "General inquiry") -> ToolResult:
+        return ToolResult(
+            result=f"Callback scheduled for {preferred_time} IST. Reason: {reason}. Our team will call you back.",
+            confidence=0.95,
+            metadata={"scheduled_time": preferred_time, "reason": reason}
+        )
 
 
 class TransferToHumanTool(BaseTool):
     name = "transfer_to_human"
-    description = "Transfer the call to a human agent when the AI cannot help or customer requests it."
+    description = "Transfer the call to a human agent for support in English or Hindi."
     parameters = {
         "type": "object",
         "properties": {
             "department": {
                 "type": "string",
-                "enum": ["support", "sales", "billing", "technical"],
+                "enum": ["support", "sales", "billing", "technical", "loans", "complaints"],
                 "description": "Department to transfer to"
+            },
+            "language": {
+                "type": "string",
+                "enum": ["english", "hindi", "hinglish"],
+                "description": "Preferred language for the human agent"
             },
             "summary": {
                 "type": "string",
-                "description": "Brief summary of the conversation for the human agent"
+                "description": "Brief conversation summary for the human agent"
             }
         },
         "required": ["department"]
     }
-    
-    async def execute(self, department: str, summary: str = "") -> str:
-        return f"Transferring to {department} department. Please hold while I connect you with a human agent."
+    cost_per_call = 0.0
+
+    async def execute(self, department: str, language: str = "english", summary: str = "") -> ToolResult:
+        lang_hint = f" in {language}" if language != "english" else ""
+        return ToolResult(
+            result=f"Transferring to {department} department{lang_hint}. Please hold while I connect you.",
+            confidence=1.0,
+            metadata={"department": department, "language": language}
+        )
 
 
-class WebSearchTool(BaseTool):
-    name = "web_search"
-    description = "Search the web for up-to-date information, news, or specific facts."
-    parameters = {
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "The search query"
-            }
-        },
-        "required": ["query"]
-    }
-    
-    async def execute(self, query: str) -> str:
-        # Simulated web search
-        return f"Search results for '{query}': According to recent reports, the requested information is verified as of {datetime.now().strftime('%Y')}. (Detailed simulated snippet provided)."
-
-
-class RefundCustomerTool(BaseTool):
-    name = "refund_customer"
-    description = "Initiate a refund for a customer. Requires human approval for security."
-    requires_approval = True
-    parameters = {
-        "type": "object",
-        "properties": {
-            "order_id": {
-                "type": "string",
-                "description": "The ID of the order to refund"
-            },
-            "amount": {
-                "type": "number",
-                "description": "Amount to refund"
-            },
-            "reason": {
-                "type": "string",
-                "description": "Reason for the refund"
-            }
-        },
-        "required": ["order_id", "amount"]
-    }
-    
-    async def execute(self, order_id: str, amount: float, reason: str = "") -> str:
-        return f"Refund of ${amount} for order {order_id} has been submitted for approval. Approval ID: {random.randint(1000, 9999)}."
-
-
-class SearchKnowledgeTool(BaseTool):
+class SearchKnowledgeBaseTool(BaseTool):
     name = "search_knowledge_base"
-    description = "Search the company knowledge base for documentation, FAQs, and policies."
+    description = "Search the company knowledge base for policies, FAQs, return/refund rules, and documentation relevant to Indian customers."
     parameters = {
         "type": "object",
         "properties": {
             "topic": {
                 "type": "string",
-                "description": "The topic or question to search for"
+                "description": "Topic or question to search for (e.g., 'return policy', 'EMI options', 'late fee')"
             }
         },
         "required": ["topic"]
     }
-    
-    async def execute(self, topic: str) -> str:
-        # This would interface with the vector database / Rag service
-        return f"Documentation found for '{topic}': Our current policy allows for returns within 30 days of purchase. (Simulated RAG result)."
+    cost_per_call = 0.05
 
-
-class UpdateProfileTool(BaseTool):
-    name = "update_user_profile"
-    description = "Update the customer's preferred contact method, name, or other profile details."
-    parameters = {
-        "type": "object",
-        "properties": {
-            "key": {
-                "type": "string",
-                "description": "The profile field to update (e.g., 'nickname', 'preferred_email')"
-            },
-            "value": {
-                "type": "string",
-                "description": "The new value"
-            }
-        },
-        "required": ["key", "value"]
-    }
-    
-    async def execute(self, key: str, value: str) -> str:
-        return f"Successfully updated your {key} to {value} in our CRM records."
+    async def execute(self, topic: str) -> ToolResult:
+        responses = {
+            "return": "Our return policy allows returns within 10 days of delivery. Items must be unused with original packaging. Pickup is free across India.",
+            "refund": "Refunds are processed within 5-7 business days after pickup. Amount is credited to the original payment method (UPI/card/NetBanking).",
+            "emi": "We offer EMI options via all major Indian banks: SBI, HDFC, ICICI, Axis, and Kotak. 3 to 24 month tenures available.",
+            "shipping": "Free shipping on orders above ₹499. Standard delivery: 3-5 business days. Express: 1-2 days (₹99 extra).",
+            "gst": "GST invoice is provided for all orders. You can download it from your account under 'My Orders' > 'Invoice'.",
+        }
+        for key, response in responses.items():
+            if key in topic.lower():
+                return ToolResult(
+                    result=response,
+                    confidence=0.9,
+                    metadata={"topic": topic, "matched_key": key}
+                )
+        return ToolResult(
+            result=f"Here is what I found about '{topic}': For more details, please visit our Help Center or ask for a specific policy.",
+            confidence=0.6,
+            metadata={"topic": topic}
+        )
 
 
 # Tool Registry
 AVAILABLE_TOOLS = {
-    "get_order_status": GetOrderStatusTool(),
-    "check_account_balance": CheckAccountBalanceTool(),
+    "verify_aadhaar": VerifyAadhaarTool(),
+    "verify_pan": VerifyPANCardTool(),
+    "check_upi_payment": CheckUPIPaymentTool(),
+    "lookup_pincode": LookupPincodeTool(),
+    "check_gst": CheckGSTTool(),
+    "translate_to_hindi": TranslateToHindiTool(),
+    "check_loan_emi": CheckLoanEMITool(),
     "schedule_callback": ScheduleCallbackTool(),
     "transfer_to_human": TransferToHumanTool(),
-    "web_search": WebSearchTool(),
-    "refund_customer": RefundCustomerTool(),
-    "search_knowledge_base": SearchKnowledgeTool(),
-    "update_user_profile": UpdateProfileTool(),
+    "search_knowledge_base": SearchKnowledgeBaseTool(),
 }
+
+ALL_TOOL_NAMES = list(AVAILABLE_TOOLS.keys())
 
 def get_tools_for_agent(tool_names: list) -> list:
     """Get tool instances for a list of tool names."""
@@ -205,3 +390,16 @@ def get_tool_schemas(tool_names: list) -> list:
     """Get tool schemas for function calling."""
     tools = get_tools_for_agent(tool_names)
     return [tool.to_schema() for tool in tools]
+
+def get_default_toolset() -> list:
+    """Return the default set of tool names for new agents."""
+    return [
+        "verify_aadhaar",
+        "verify_pan",
+        "check_upi_payment",
+        "lookup_pincode",
+        "check_gst",
+        "translate_to_hindi",
+        "check_loan_emi",
+        "search_knowledge_base",
+    ]

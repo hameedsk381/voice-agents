@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 import redis.asyncio as redis
 from app.core.config import settings
+from app.core.metrics import active_sessions
 from loguru import logger
 
 
@@ -81,6 +82,7 @@ class SessionManager:
         # Track session under agent and globally
         await self.redis.sadd(self._agent_sessions_key(agent_id), session_id)
         await self.redis.sadd(self._active_sessions_key(), session_id)
+        active_sessions.inc()
         
         logger.info(f"Created session {session_id} for agent {agent_id}")
         return session
@@ -213,6 +215,7 @@ class SessionManager:
         })
         # Remove from active global tracking
         await self.redis.srem(self._active_sessions_key(), session_id)
+        active_sessions.dec()
         
         logger.info(f"Session {session_id} ended: {reason}")
     

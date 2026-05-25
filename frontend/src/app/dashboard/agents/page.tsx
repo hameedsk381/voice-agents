@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchAgents, createAgent } from "@/lib/api";
-import { Plus, Bot, MoreVertical, Globe, Settings, ArrowRight } from "lucide-react";
+import api, { fetchAgents, createAgent } from "@/lib/api";
+import { LANGUAGES, defaultLanguage, languageDisplay } from "@/lib/languages";
+import { Plus, Bot, MoreVertical, Globe, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Agent {
     id: string;
@@ -14,15 +19,40 @@ interface Agent {
     language: string;
 }
 
+interface Voice {
+    id: string;
+    name: string;
+    type: string;
+    primaryLanguage: string;
+}
+
 export default function AgentsPage() {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [voices, setVoices] = useState<Voice[]>([]);
+    const [selectedVoice, setSelectedVoice] = useState("auto");
+    const [createLang, setCreateLang] = useState(defaultLanguage());
 
     useEffect(() => {
         loadAgents();
     }, []);
+
+    useEffect(() => {
+        if (isModalOpen) {
+            const fetchVoices = async () => {
+                try {
+                    const data = await api.get(`/voices/?primaryLanguage=${encodeURIComponent(createLang)}`);
+                    setVoices(data);
+                } catch {
+                    setVoices([]);
+                }
+            };
+            fetchVoices();
+            setSelectedVoice("auto");
+        }
+    }, [createLang, isModalOpen]);
 
     const loadAgents = async () => {
         try {
@@ -32,6 +62,18 @@ export default function AgentsPage() {
             console.error("Failed to load agents", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const openCreateModal = async () => {
+        setIsModalOpen(true);
+        setSelectedVoice("auto");
+        setCreateLang(defaultLanguage());
+        try {
+            const data = await api.get(`/voices/?primaryLanguage=${encodeURIComponent(defaultLanguage())}`);
+            setVoices(data);
+        } catch {
+            setVoices([]);
         }
     };
 
@@ -45,9 +87,10 @@ export default function AgentsPage() {
             name: formData.get('name'),
             role: formData.get('role'),
             persona: formData.get('persona'),
-            language: formData.get('language') || 'en-US',
+            language: formData.get('language') || defaultLanguage(),
             tools: [],
-            goals: []
+            goals: [],
+            config: { voice: selectedVoice !== 'auto' ? selectedVoice : undefined }
         };
 
         try {
@@ -67,172 +110,227 @@ export default function AgentsPage() {
             {/* Header section */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                        Voice <span className="text-gradient-brand">Agents</span>
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                        Voice{" "}
+                        <span className="text-primary">
+                            Agents
+                        </span>
                     </h2>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">Deploy, monitor, and configure your autonomous voice agent workforce.</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Deploy, monitor, and configure your autonomous voice agent workforce.
+                    </p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white hover:shadow-lg hover:shadow-[var(--accent-cyan)]/25 transition-all duration-300 flex items-center gap-2"
+                <Button
+                    onClick={openCreateModal}
+                    className="flex items-center gap-2"
                 >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="size-4" />
                     Create New Agent
-                </button>
+                </Button>
             </div>
 
             {loading ? (
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="glass-card h-44 animate-pulse" />
+                        <Card key={i} className="h-44 animate-pulse" />
                     ))}
                 </div>
             ) : (
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                    {agents.map((agent, index) => {
-                        // Different gradient colors based on index for unique look
-                        const gradients = [
-                            "from-[var(--accent-cyan)] to-[var(--accent-blue)]",
-                            "from-[var(--accent-purple)] to-[var(--accent-rose)]",
-                            "from-[var(--accent-blue)] to-[var(--accent-purple)]"
-                        ];
-                        const grad = gradients[index % gradients.length];
-                        
-                        return (
-                            <Link href={`/dashboard/agents/${agent.id}`} key={agent.id} className="group relative block">
-                                <div className="glass-card p-5 group flex flex-col justify-between h-full min-h-[180px] transition-all duration-300 hover:border-white/[0.15] hover:shadow-[0_0_25px_rgba(0,212,170,0.04)] relative">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {agents.map((agent) => (
+                        <Link href={`/dashboard/agents/${agent.id}`} key={agent.id} className="group block">
+                            <Card className="flex flex-col justify-between h-full min-h-[180px] hover:shadow-md transition-all hover:border-primary/50">
+                                <CardHeader>
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white shadow-md shadow-black/35`}>
-                                                <Bot className="w-4 h-4" />
+                                            <div className="size-10 rounded-lg bg-primary flex items-center justify-center">
+                                                <Bot className="size-5 text-white" />
                                             </div>
                                             <div>
-                                                <h3 className="text-sm font-bold text-[var(--text-primary)] tracking-tight truncate max-w-[150px]">
+                                                <CardTitle className="text-sm font-semibold tracking-tight truncate max-w-[150px]">
                                                     {agent.name}
-                                                </h3>
-                                                <p className="text-[10px] text-[var(--text-secondary)] mt-0.5 font-medium truncate max-w-[150px]">
+                                                </CardTitle>
+                                                <CardDescription className="text-xs mt-0.5 truncate max-w-[150px]">
                                                     {agent.role}
-                                                </p>
+                                                </CardDescription>
                                             </div>
                                         </div>
-                                        <button className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1">
-                                            <MoreVertical className="w-4.5 h-4.5" />
-                                        </button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                                            <MoreVertical className="size-4" />
+                                        </Button>
                                     </div>
-                                    
-                                    <p className="text-xs text-[var(--text-secondary)] mt-4 line-clamp-2 leading-relaxed">
+                                </CardHeader>
+
+                                <CardContent>
+                                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                                         {agent.persona}
                                     </p>
+                                </CardContent>
 
-                                    <div className="mt-5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
-                                                agent.is_active 
-                                                    ? 'bg-[var(--accent-emerald)]/10 text-[var(--accent-emerald)] border-[var(--accent-emerald)]/20' 
-                                                    : 'bg-[var(--glass-bg)] text-[var(--text-tertiary)] border-[var(--border-subtle)]'
-                                            }`}>
-                                                {agent.is_active ? 'Active' : 'Inactive'}
-                                            </span>
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--bg-overlay)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-                                                <Globe className="w-2.5 h-2.5" />
-                                                {agent.language}
-                                            </span>
-                                        </div>
-                                        <div className="text-[var(--text-tertiary)] group-hover:text-[var(--text-primary)] transition-all group-hover:translate-x-0.5">
-                                            <ArrowRight className="w-3.5 h-3.5" />
-                                        </div>
+                                <CardFooter className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                            agent.is_active
+                                                ? 'bg-green-500/10 text-green-600'
+                                                : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                            {agent.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary">
+                                            <Globe className="size-3" />
+                                            {agent.language}
+                                        </span>
                                     </div>
-                                </div>
-                            </Link>
-                        );
-                    })}
+                                    <div className="text-muted-foreground group-hover:text-primary transition-all group-hover:translate-x-0.5">
+                                        <ArrowRight className="size-4" />
+                                    </div>
+                                </CardFooter>
+                            </Card>
+                        </Link>
+                    ))}
 
                     {/* Empty State */}
                     {agents.length === 0 && (
-                        <div className="col-span-full py-16 text-center text-[var(--text-secondary)] border border-dashed border-[var(--border-default)] rounded-2xl bg-[var(--bg-overlay)]">
-                            <Bot className="w-8 h-8 mx-auto mb-3 text-[var(--text-tertiary)]" />
-                            <p className="text-sm font-semibold">No active agents found</p>
-                            <p className="text-xs text-[var(--text-tertiary)] mt-1">Create your first voice agent to start making outbound calls.</p>
-                        </div>
+                        <Card className="col-span-full border-dashed">
+                            <CardContent className="py-16 text-center">
+                                <div className="size-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                                    <Bot className="size-6 text-primary" />
+                                </div>
+                                <p className="text-sm font-semibold text-foreground">No active agents found</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Create your first voice agent to start making outbound calls.
+                                </p>
+                                <Button
+                                    onClick={openCreateModal}
+                                    className="mt-4"
+                                    size="sm"
+                                >
+                                    <Plus className="size-4 mr-2" />
+                                    Create Agent
+                                </Button>
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
             )}
 
-            {/* Premium Create Agent Modal */}
+            {/* Create Agent Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade">
-                    <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-2xl p-6 shadow-2xl relative overflow-hidden">
-                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)]" />
-                        
-                        <h3 className="text-base font-bold text-[var(--text-primary)] mb-4">Create Voice Agent</h3>
-                        
-                        <form onSubmit={handleCreateAgent} className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Agent Name</label>
-                                <input 
-                                    name="name" 
-                                    required 
-                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all" 
-                                    placeholder="e.g. Inbound Sales Assistant" 
-                                />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+                    <Card className="w-full max-w-md shadow-2xl">
+                        <CardHeader>
+                            <div className="flex items-center gap-3">
+                                <div className="size-10 rounded-lg bg-primary flex items-center justify-center">
+                                    <Sparkles className="size-5 text-white" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold">Create Voice Agent</CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Configure a new autonomous voice agent for your workflow.
+                                    </CardDescription>
+                                </div>
                             </div>
-                            
-                            <div>
-                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Primary Role</label>
-                                <input 
-                                    name="role" 
-                                    required 
-                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all" 
-                                    placeholder="e.g. Lead Qualification" 
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Language Profile</label>
-                                <select
-                                    name="language"
-                                    defaultValue="en-US"
-                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-cyan)] transition-all select-none cursor-pointer"
-                                >
-                                    <option value="en-US" className="bg-[var(--bg-surface)]">English (US)</option>
-                                    <option value="en-GB" className="bg-[var(--bg-surface)]">English (UK)</option>
-                                    <option value="hi" className="bg-[var(--bg-surface)]">Hindi (हिन्दी)</option>
-                                    <option value="es" className="bg-[var(--bg-surface)]">Spanish (Español)</option>
-                                    <option value="fr" className="bg-[var(--bg-surface)]">French (Français)</option>
-                                    <option value="de" className="bg-[var(--bg-surface)]">German (Deutsch)</option>
-                                    <option value="pt" className="bg-[var(--bg-surface)]">Portuguese (Português)</option>
-                                </select>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">System Persona (Instructions)</label>
-                                <textarea 
-                                    name="persona" 
-                                    required 
-                                    rows={4} 
-                                    className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all resize-none" 
-                                    placeholder="Define the behavior constraints and goals of the voice bot..."
-                                />
-                            </div>
-                            
-                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--border-subtle)]">
-                                <button 
-                                    type="button" 
-                                    onClick={() => setIsModalOpen(false)} 
-                                    className="px-4 py-2.5 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                        </CardHeader>
+
+                        <form onSubmit={handleCreateAgent}>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="agent-name" className="text-xs font-semibold uppercase tracking-wider">
+                                        Agent Name
+                                    </Label>
+                                    <Input
+                                        id="agent-name"
+                                        name="name"
+                                        required
+                                        placeholder="e.g. Inbound Sales Assistant"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="agent-role" className="text-xs font-semibold uppercase tracking-wider">
+                                        Primary Role
+                                    </Label>
+                                    <Input
+                                        id="agent-role"
+                                        name="role"
+                                        required
+                                        placeholder="e.g. Lead Qualification"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="agent-language" className="text-xs font-semibold uppercase tracking-wider">
+                                        Language Profile
+                                    </Label>
+                                    <select
+                                        id="agent-language"
+                                        name="language"
+                                        value={createLang}
+                                        onChange={e => setCreateLang(e.target.value)}
+                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        {LANGUAGES.map(l => (
+                                        <option key={l.code} value={l.code}>
+                                            {languageDisplay(l.code)}
+                                        </option>
+                                    ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold uppercase tracking-wider">Voice</Label>
+                                    <select
+                                        value={selectedVoice}
+                                        onChange={e => setSelectedVoice(e.target.value)}
+                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        <option value="auto">Auto-Select</option>
+                                        {voices.map(v => (
+                                            <option key={v.id} value={v.id}>{v.name} ({v.type})</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="agent-persona" className="text-xs font-semibold uppercase tracking-wider">
+                                        System Persona (Instructions)
+                                    </Label>
+                                    <textarea
+                                        id="agent-persona"
+                                        name="persona"
+                                        required
+                                        rows={4}
+                                        className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                                        placeholder="Define the behavior constraints and goals of the voice bot..."
+                                    />
+                                </div>
+                            </CardContent>
+
+                            <CardFooter className="flex justify-end gap-3">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => setIsModalOpen(false)}
                                 >
                                     Cancel
-                                </button>
-                                <button 
-                                    type="submit" 
+                                </Button>
+                                <Button
+                                    type="submit"
                                     disabled={submitting}
-                                    className="px-4 py-2.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2 hover:-translate-y-0.5 active:translate-y-0 active:scale-98"
+                                    className="flex items-center gap-2"
                                 >
-                                    {submitting ? 'Creating...' : 'Deploy Agent'}
-                                </button>
-                            </div>
+                                    {submitting ? (
+                                        <>
+                                            <Loader2 className="size-4 animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        'Deploy Agent'
+                                    )}
+                                </Button>
+                            </CardFooter>
                         </form>
-                    </div>
+                    </Card>
                 </div>
             )}
         </div>

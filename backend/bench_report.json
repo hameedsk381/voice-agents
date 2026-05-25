@@ -1,0 +1,34 @@
+[
+  {
+    "label": "Mock STT (simulated 50ms)",
+    "n": 3,
+    "min_ms": 53.54,
+    "p50_ms": 63.94,
+    "p95_ms": 64.08,
+    "p99_ms": 64.09,
+    "max_ms": 64.1,
+    "mean_ms": 60.52,
+    "stdev_ms": 6.05,
+    "metadata": {}
+  },
+  {
+    "label": "Deepgram STT (nova-2, en-IN)",
+    "n": 0,
+    "error": "no samples"
+  },
+  {
+    "label": "Groq llama-3.3-70b-versatile",
+    "n": 0,
+    "error": "no samples"
+  },
+  {
+    "label": "Groq llama-3.1-8b-instant",
+    "n": 0,
+    "error": "no samples"
+  },
+  {
+    "label": "STT + LLM (mock+groq-70b)",
+    "n": 0,
+    "error": "no samples"
+  }
+]

@@ -1,0 +1,120 @@
+# Voise AI — Helm Values
+# Override per environment (dev/staging/prod) via -f values-<env>.yaml
+
+global:
+  namespace: voise
+  imagePullPolicy: Always
+  imagePullSecret: voise-docker-registry
+
+backend:
+  image: voise/backend
+  tag: latest
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 10
+  cpuRequest: 250m
+  memoryRequest: 512Mi
+  cpuLimit: 2
+  memoryLimit: 2Gi
+  targetCpuUtilization: 70
+  targetMemoryUtilization: 80
+  servicePort: 8001
+
+frontend:
+  image: voise/frontend
+  tag: latest
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 8
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+  cpuLimit: 500m
+  memoryLimit: 512Mi
+  targetCpuUtilization: 70
+  servicePort: 3000
+
+postgres:
+  image: pgvector/pgvector:pg15
+  storageSize: 20Gi
+  cpuRequest: 500m
+  memoryRequest: 512Mi
+  cpuLimit: 2
+  memoryLimit: 2Gi
+
+redis:
+  image: redis:7
+  storageSize: 5Gi
+  cpuRequest: 100m
+  memoryRequest: 128Mi
+  cpuLimit: 500m
+  memoryLimit: 512Mi
+
+temporal:
+  image: temporalio/auto-setup:latest
+  cpuRequest: 200m
+  memoryRequest: 256Mi
+  cpuLimit: 1
+  memoryLimit: 1Gi
+
+prometheus:
+  image: prom/prometheus:latest
+  storageSize: 20Gi
+  cpuRequest: 200m
+  memoryRequest: 512Mi
+  cpuLimit: 1
+  memoryLimit: 2Gi
+
+grafana:
+  image: grafana/grafana:latest
+  storageSize: 5Gi
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+  cpuLimit: 500m
+  memoryLimit: 1Gi
+  adminUser: admin
+  adminPassword: voise2026
+
+otelCollector:
+  image: otel/opentelemetry-collector-contrib:latest
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+  cpuLimit: 500m
+  memoryLimit: 512Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  tlsSecretName: voise-tls
+  hosts:
+    frontend: voise.ai
+    api: api.voise.ai
+
+config:
+  environment: prod
+  logFormat: json
+  metricsEnabled: true
+  otelEndpoint: http://voise-otel-collector:4318
+  voiceRuntime: ultravox
+  ultravoxBaseUrl: https://api.ultravox.ai/api
+  ultravoxModel: fixie-ai/ultravox-70B
+  ultravoxVoice: Mark
+  sttProvider: deepgram
+  postgresDb: voise
+  postgresUser: postgres
+
+secrets:
+  secretKey: ""  # Must be set in prod
+  postgresPassword: ""
+  redisPassword: ""
+  groqApiKey: ""
+  openaiApiKey: ""
+  deepgramApiKey: ""
+  ultravoxApiKey: ""
+  ultravoxCallbackSecret: ""
+  twilioAccountSid: ""
+  twilioAuthToken: ""
+  twilioPhoneNumber: ""
+  smtpHost: ""
+  smtpUser: ""
+  smtpPassword: ""
+  smtpFrom: ""

@@ -70,11 +70,50 @@ class Settings(BaseSettings):
     # Override full URL; default derived from SERVER_HOST at runtime
     ULTRAVOX_CALL_ENDED_WEBHOOK_URL: Optional[str] = None
 
+    # Inactivity messages
+    ULTRAVOX_INACTIVITY_TIMEOUT_SECONDS: int = 120
+    ULTRAVOX_INACTIVITY_WARNING_MESSAGE: str = "Are you still there? I'm here if you need me."
+    ULTRAVOX_INACTIVITY_FINAL_MESSAGE: str = "I'll let you go now. Goodbye!"
+
+    # Per-call defaults
+    ULTRAVOX_DEFAULT_JOIN_TIMEOUT: str = "60s"
+    ULTRAVOX_DEFAULT_MAX_DURATION: str = "3600s"
+    ULTRAVOX_DEFAULT_TEMPERATURE: float = 0.4
+    ULTRAVOX_DEFAULT_RECORDING_ENABLED: bool = True
+
+    # Shared secrets for signing outbound requests (comma-separated)
+    ULTRAVOX_SHARED_SECRETS: Optional[str] = None
+
+    # Retention: "retain", "auto_delete", or "unspecified" (default: retain)
+    ULTRAVOX_RETENTION_POLICY: str = "CALL_RETENTION_POLICY_RETAIN"
+
+    # Throttles (0 = unlimited)
+    ULTRAVOX_MAX_CONCURRENT_CALLS: int = 0
+
     # Telephony
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
     SERVER_HOST: str = "localhost:8001"
+
+    # WhatsApp
+    TWILIO_WHATSAPP_SENDER: str = "whatsapp:+919999999999"
+    TWILIO_STATUS_CALLBACK_URL: Optional[str] = None
+    WHATSAPP_RATE_LIMIT_PER_HOUR: int = 0  # 0 = unlimited
+    WHATSAPP_OPTIN_REQUIRED: bool = True
+    WHATSAPP_TEMPLATE_NAMESPACE: Optional[str] = None
+
+    # Email (workflow automation)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: Optional[str] = None
+    SMTP_USE_TLS: bool = True
+
+    # Observability
+    LOG_FORMAT: str = "text"  # "text" or "json"
+    METRICS_ENABLED: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

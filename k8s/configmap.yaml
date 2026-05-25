@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voise-config
+  namespace: voise
+  labels:
+    app.kubernetes.io/name: voise-ai
+data:
+  # --- Backend ---
+  ENVIRONMENT: "prod"
+  PROJECT_NAME: "Voise AI"
+  API_V1_STR: "/api/v1"
+  POSTGRES_SERVER: "voise-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "voise"
+  POSTGRES_USER: "postgres"
+  REDIS_HOST: "voise-redis"
+  REDIS_PORT: "6379"
+  TEMPORAL_HOST: "voise-temporal:7233"
+  VOICE_RUNTIME: "ultravox"
+  USE_ULTRAVOX_RUNTIME: "true"
+  USE_ULTRAVOX_WEBSOCKET_PROXY: "false"
+  ULTRAVOX_BASE_URL: "https://api.ultravox.ai/api"
+  ULTRAVOX_MODEL: "fixie-ai/ultravox-70B"
+  ULTRAVOX_VOICE: "Mark"
+  ULTRAVOX_INPUT_SAMPLE_RATE: "48000"
+  ULTRAVOX_OUTPUT_SAMPLE_RATE: "48000"
+  ULTRAVOX_CLIENT_BUFFER_MS: "60"
+  ULTRAVOX_CALLBACKS_ENABLED: "true"
+  STT_PROVIDER: "deepgram"
+  COOKIE_SECURE: "true"
+  LOG_FORMAT: "json"
+  METRICS_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://voise-otel-collector:4318"
+  # --- Frontend ---
+  BACKEND_URL: "http://voise-backend:8001"
+  NEXT_PUBLIC_API_URL: "https://api.voise.ai"

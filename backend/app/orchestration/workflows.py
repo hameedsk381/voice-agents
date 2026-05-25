@@ -76,8 +76,8 @@ async def execute_tool_activity(tool_name: str, arguments: Dict[str, Any]) -> st
     
     if tool_name in AVAILABLE_TOOLS:
         tool = AVAILABLE_TOOLS[tool_name]
-        result = await tool.execute(**arguments)
-        return result
+        tr = await tool.execute(**arguments)
+        return tr.result
     return f"Tool {tool_name} not found"
 
 

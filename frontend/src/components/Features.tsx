@@ -1,104 +1,140 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Phone, Users, Activity, Lock, Cpu, Globe } from "lucide-react";
+import { Phone, CheckSquare, Sparkles, Calendar, Globe, Shield } from "lucide-react";
 
 const features = [
-    {
-        icon: Phone,
-        title: "AI Outbound Call Agents",
-        description: "Deploy intelligent voice agents that make outbound calls at scale — natural conversations for payment collection, reminders, and follow-ups.",
-        accent: "from-cyan-400 to-teal-500",
-        glow: "rgba(0,212,170,0.15)",
-    },
-    {
-        icon: Users,
-        title: "Payment Reminder Calls",
-        description: "Automate payment collection with polite, persistent AI voice calls. Reduce delinquencies without hiring more agents.",
-        accent: "from-violet-400 to-purple-500",
-        glow: "rgba(139,92,246,0.15)",
-    },
-    {
-        icon: Activity,
-        title: "Lead Qualification Calls",
-        description: "AI agents that screen, qualify, and route leads autonomously — capturing intent and booking meetings without human intervention.",
-        accent: "from-blue-400 to-indigo-500",
-        glow: "rgba(59,130,246,0.15)",
-    },
-    {
-        icon: Lock,
-        title: "Appointment Automation",
-        description: "Confirm, reschedule, and cancel appointments with natural voice conversations. Reduce no-shows and free up your front desk.",
-        accent: "from-emerald-400 to-green-500",
-        glow: "rgba(16,185,129,0.15)",
-    },
-    {
-        icon: Globe,
-        title: "Fits Your Workflow",
-        description: "Connect your CRM, calendar, and payment systems. Voise AI slots into how your team already works—no IT project required.",
-        accent: "from-amber-400 to-orange-500",
-        glow: "rgba(245,158,11,0.15)",
-    },
-    {
-        icon: Cpu,
-        title: "Enterprise-Grade Reliability",
-        description: "Compliance-ready, monitored, and auditable. Built for regulated industries that need trust, transparency, and control.",
-        accent: "from-rose-400 to-pink-500",
-        glow: "rgba(244,63,94,0.15)",
-    },
+  {
+    icon: Phone,
+    title: "Real-Time Outbound AI Agents",
+    tagline: "AUTONOMOUS VOICE",
+    description:
+      "Initiate high-volume outbound campaigns with intelligent, fluent conversational bots. Capable of handling complex objectives, overcoming active resistance, and scheduling CRM followups completely on autopilot.",
+    span: "lg:col-span-2 lg:row-span-1",
+    color: "primary",
+  },
+  {
+    icon: CheckSquare,
+    title: "Smart Payment Reminders",
+    tagline: "DEBT COLLECTION",
+    description:
+      "Drastically improve collections and cashflow with empathetic yet persistent AI voice reminders, supporting flexible installment scheduling and instant confirmation.",
+    span: "lg:col-span-1",
+    color: "accent",
+  },
+  {
+    icon: Sparkles,
+    title: "Instant Lead Pre-Screening",
+    tagline: "LEAD QUANTIFICATION",
+    description:
+      "Screen and qualify incoming inbound or newly acquired leads autonomously. Capture buyer intents, evaluate budget thresholds, and book calendar times instantly.",
+    span: "lg:col-span-1",
+    color: "accent",
+  },
+  {
+    icon: Calendar,
+    title: "Automated Appointment Scheduling",
+    tagline: "CALENDAR AUTOMATION",
+    description:
+       "Confirm, rebook, or clear appointments conversationally with zero wait times. Integrated webhooks connect directly to your calendar system.",
+    span: "lg:col-span-1",
+    color: "primary",
+  },
+  {
+    icon: Globe,
+    title: "12 Native Indian Languages",
+    tagline: "NATIVE DIVERSITY",
+    description:
+      "Break geographic barriers with direct models fluent in Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese, and English. Supports regional accents across India.",
+    span: "lg:col-span-2 lg:row-span-1",
+    color: "primary",
+  },
+  {
+    icon: Shield,
+    title: "Enterprise Security & Consent",
+    tagline: "COMPLIANCE BUILT-IN",
+    description:
+      "Fully compliant with India's DPDP Act 2023. Featuring end-to-end encrypted logs, PII-aware data storage redactors, and active consent verification modules.",
+    span: "lg:col-span-1",
+    color: "accent",
+  },
 ];
 
 export default function Features() {
-    return (
-        <section id="features" className="py-28 relative">
-            <div className="container mx-auto px-4">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-100px" }}
-                    transition={{ duration: 0.6 }}
-                    className="text-center mb-16"
-                >
-                    <h2 className="text-3xl md:text-5xl font-bold mb-6 text-[var(--text-primary)]">
-                        Voice Automation for{" "}
-                        <br className="hidden md:block" />
-                        <span className="text-gradient-brand">Operational Workflows</span>
-                    </h2>
-                    <p className="text-[var(--text-secondary)] max-w-2xl mx-auto text-lg">
-                        Deploy AI voice agents that handle outbound calls, payment reminders, lead qualification, and appointment scheduling — all from one platform.
-                    </p>
-                </motion.div>
+  return (
+    <section id="features" className="py-24 relative border-t border-border dark:border-zinc-900 bg-muted/20 dark:bg-zinc-950/40">
+      <div className="container mx-auto px-4 max-w-6xl">
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-16"
+        >
+          <span className="text-[10px] font-bold text-accent uppercase tracking-[0.25em] block mb-3">
+            TECHNICAL CAPABILITIES
+          </span>
+          <h2 className="font-display font-black text-3xl sm:text-4xl tracking-tight text-foreground uppercase">
+            WHAT VOISE AI AUTOMATES
+          </h2>
+          <p className="text-muted-foreground text-sm sm:text-base max-w-xl mx-auto mt-4 leading-relaxed">
+            Replace legacy rigid IVR menus with fully-autonomous real-time agents designed for modern businesses.
+          </p>
+        </motion.div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {features.map((feature, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-50px" }}
-                            transition={{ duration: 0.5, delay: index * 0.08 }}
-                            className="group relative p-7 rounded-2xl bg-[var(--bg-overlay)] border border-[var(--border-subtle)] hover:border-[var(--border-active)] hover:bg-[var(--glass-bg-hover)] transition-all duration-300 backdrop-blur-sm"
-                            style={{
-                                boxShadow: 'none',
-                            }}
-                            onMouseEnter={(e) => {
-                                (e.currentTarget as HTMLElement).style.boxShadow = `0 0 40px ${feature.glow}`;
-                            }}
-                            onMouseLeave={(e) => {
-                                (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                            }}
-                        >
-                            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.accent} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                                <feature.icon className="w-5 h-5 text-white" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2.5">{feature.title}</h3>
-                            <p className="text-[var(--text-secondary)] leading-relaxed text-sm">
-                                {feature.description}
-                            </p>
-                        </motion.div>
-                    ))}
+        {/* Bento Grid Feature Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr">
+          {features.map((f, i) => {
+            const Icon = f.icon;
+            const isPrimary = f.color === "primary";
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.05 }}
+                className={`${f.span} group relative overflow-hidden rounded-2xl border border-border dark:border-zinc-900 bg-card dark:bg-zinc-950/60 p-8 hover:border-zinc-300 dark:hover:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 hover:shadow-md dark:hover:shadow-none transition-all duration-300 flex flex-col justify-between`}
+              >
+                <div>
+                  {/* Icon Panel */}
+                  <div
+                    className={`size-10 rounded-xl flex items-center justify-center mb-6 transition-all duration-300 ${
+                      isPrimary
+                        ? "bg-primary/10 text-primary border border-primary/20 group-hover:bg-primary/20"
+                        : "bg-accent/10 text-accent border border-accent/20 group-hover:bg-accent/20"
+                    }`}
+                  >
+                    <Icon className="size-5" strokeWidth={1.5} />
+                  </div>
+
+                  {/* Tagline */}
+                  <span className="text-[8px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase block mb-1.5">
+                    {f.tagline}
+                  </span>
+
+                  {/* Title */}
+                  <h3 className="font-display font-bold text-lg text-foreground mb-3 leading-tight group-hover:text-primary transition-colors">
+                    {f.title}
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    {f.description}
+                  </p>
                 </div>
-            </div>
-        </section>
-    );
+
+                {/* Subtle bottom indicator line on card */}
+                <div
+                  className={`h-[2px] w-full absolute bottom-0 left-0 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300 ${
+                    isPrimary ? "bg-primary" : "bg-accent"
+                  }`}
+                />
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
 }

@@ -1,6 +1,10 @@
 # Enterprise Voice Pipeline Documentation
 
-This document outlines the end-to-end flow of the Voise AI voice pipeline, focusing on enterprise control and safety layers (Ultravox runtime by default).
+This document outlines the end-to-end flow of the Voise AI voice pipeline, focusing on enterprise control and safety layers (**Ultravox runtime by default**).
+
+> **Related:** [ARCHITECTURE.md](./ARCHITECTURE.md) · [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) (post-call business workflows, separate from this real-time loop)
+
+**Orchestrator modules (refactored):** `turn_processor.py`, `audio_handler.py`, `tool_executor.py`, `websocket_proxy.py`, `agent_orchestrator.py`, `policy_engine.py`
 
 ## 1. Interaction Entry (WebSocket)
 The pipeline begins when a client connects to `/ws/{agent_id}`. 
@@ -57,7 +61,10 @@ This happens in the background to avoid blocking the voice interaction:
 
 ## Technical Stack
 - **Orchestration:** Python / FastAPI / Asyncio
+- **Default voice runtime:** Ultravox (`VOICE_RUNTIME=ultravox`, `ultravox-client` in playground)
+- **Legacy / custom path:** Groq LLM + Mock/Deepgram STT + Qwen/Deepgram TTS
 - **Policy Engine:** Custom State Machine + Guardrails
 - **Real-time HITL:** Redis Pub/Sub
-- **STT/TTS:** Deepgram / QwenTTS
-- **Intelligence:** Groq (Llama 3) / OpenAI / LangGraph
+- **Telephony:** Twilio webhooks + Ultravox medium
+- **Intelligence:** Groq (Llama 3) / OpenAI / LangGraph (complex turns)
+- **Post-call business flows:** In-app `WorkflowEngine` (not this WebSocket loop) — see WORKFLOW_AUTOMATION.md

@@ -11,7 +11,7 @@ from sentence_transformers import SentenceTransformer
 from loguru import logger
 import json
 
-from app.models.memory import MemoryItem, ConversationSummary, UserProfile
+from app.models.memory import MemoryItem, ConversationSummary, UserProfile, WorkingMemory, ProceduralMemory
 from app.services.compliance_service import redactor
 from datetime import timedelta
 
@@ -68,7 +68,16 @@ class MemoryService:
             MemoryItem.key == key,
             MemoryItem.organization_id == organization_id
         ).first()
-        
+
+        # Respect do_not_remember — refuse to create new memories under this key
+        if not existing and self.db.query(MemoryItem).filter(
+            MemoryItem.user_id == user_id,
+            MemoryItem.key == key,
+            MemoryItem.do_not_remember == True
+        ).first():
+            logger.info(f"Skipping memorize for {user_id}/{key}: flagged do_not_remember")
+            return None
+
         if existing:
             # Update existing memory
             # Mandatory PII masking at storage layer for sensitive fields
@@ -213,6 +222,7 @@ Return ONLY valid JSON array, no other text:"""
         
         filters = [
             MemoryItem.confidence >= min_confidence,
+            MemoryItem.do_not_remember == False,
             or_(MemoryItem.expires_at == None, MemoryItem.expires_at > datetime.utcnow())
         ]
         if user_id:
@@ -247,80 +257,6 @@ Return ONLY valid JSON array, no other text:"""
         
         self.db.commit()
         return memories
-    
-    async def get_user_memories(
-        self,
-        user_id: str,
-        categories: List[str] = None,
-        organization_id: str = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Get all memories for a user, grouped by category.
-        """
-        query = self.db.query(MemoryItem).filter(MemoryItem.user_id == user_id)
-        if organization_id:
-            query = query.filter(MemoryItem.organization_id == organization_id)
-        
-        if categories:
-            query = query.filter(MemoryItem.category.in_(categories))
-        
-        memories = query.order_by(MemoryItem.category, MemoryItem.updated_at.desc()).all()
-        
-        result = {}
-        for memory in memories:
-            if memory.category not in result:
-                result[memory.category] = []
-            result[memory.category].append({
-                "key": memory.key,
-                "value": memory.value,
-                "type": memory.memory_type,
-                "confidence": memory.confidence,
-                "updated_at": memory.updated_at.isoformat() if memory.updated_at else None
-            })
-        
-        return result
-    
-    async def get_context_for_call(self, user_id: str, organization_id: str = None) -> str:
-        """
-        Build a context string for an agent about a user.
-        Called at the start of a conversation to provide history.
-        """
-        # Get user profile
-        profile = self.db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-        
-        # Get recent memories
-        memories = await self.get_user_memories(user_id, organization_id=organization_id)
-        
-        # Get last conversation summary
-        last_summary = self.db.query(ConversationSummary).filter(
-            ConversationSummary.user_id == user_id
-        ).order_by(ConversationSummary.created_at.desc()).first()
-        
-        context_parts = []
-        
-        if profile:
-            context_parts.append(f"**Returning caller**: {profile.name or 'Unknown name'}")
-            context_parts.append(f"- Total previous calls: {int(profile.total_calls)}")
-            if profile.preferences:
-                context_parts.append(f"- Known preferences: {json.dumps(profile.preferences)}")
-        else:
-            context_parts.append("**New caller**: No previous interaction history")
-        
-        if memories:
-            context_parts.append("\n**Known facts about this caller:**")
-            for category, items in memories.items():
-                context_parts.append(f"- {category}:")
-                for item in items[:5]:  # Limit per category
-                    type_icon = "[✓]" if item['type'] in ['system_verified', 'regulated_fact'] else "[?]"
-                    context_parts.append(f"  {type_icon} {item['key']}: {item['value']} ({item['type']})")
-        
-        if last_summary:
-            context_parts.append(f"\n**Last conversation ({last_summary.created_at.strftime('%Y-%m-%d')}):**")
-            context_parts.append(f"- Summary: {last_summary.summary}")
-            if last_summary.outcome:
-                context_parts.append(f"- Outcome: {last_summary.outcome}")
-        
-        return "\n".join(context_parts) if context_parts else ""
     
     # ==================== SUMMARIZE ====================
     
@@ -435,6 +371,266 @@ KEY POINTS:
         profile.consent_status = status
         self.db.commit()
         logger.info(f"Consent for user {user_id} updated to: {status}")
+
+
+    # ==================== WORKING MEMORY ====================
+
+    async def set_working(
+        self,
+        agent_id: str,
+        session_id: str,
+        key: str,
+        value: Any,
+        ttl_seconds: int = None
+    ) -> WorkingMemory:
+        """Store ephemeral working memory for an active session."""
+        existing = self.db.query(WorkingMemory).filter(
+            WorkingMemory.session_id == session_id,
+            WorkingMemory.key == key
+        ).first()
+
+        if existing:
+            existing.value = value
+            existing.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds) if ttl_seconds else None
+            self.db.commit()
+            return existing
+
+        wm = WorkingMemory(
+            agent_id=agent_id,
+            session_id=session_id,
+            key=key,
+            value=value,
+            expires_at=datetime.utcnow() + timedelta(seconds=ttl_seconds) if ttl_seconds else None
+        )
+        self.db.add(wm)
+        self.db.commit()
+        logger.debug(f"Working memory set: {session_id}/{key}")
+        return wm
+
+    async def get_working(
+        self,
+        session_id: str,
+        key: str = None
+    ) -> Any:
+        """Retrieve working memory for a session. Returns single value or all as dict."""
+        if key:
+            entry = self.db.query(WorkingMemory).filter(
+                WorkingMemory.session_id == session_id,
+                WorkingMemory.key == key,
+                or_(WorkingMemory.expires_at == None, WorkingMemory.expires_at > datetime.utcnow())
+            ).first()
+            return entry.value if entry else None
+
+        entries = self.db.query(WorkingMemory).filter(
+            WorkingMemory.session_id == session_id,
+            or_(WorkingMemory.expires_at == None, WorkingMemory.expires_at > datetime.utcnow())
+        ).all()
+        return {e.key: e.value for e in entries}
+
+    async def clear_working(self, session_id: str):
+        """Clear all working memory for a finished session."""
+        self.db.query(WorkingMemory).filter(WorkingMemory.session_id == session_id).delete()
+        self.db.commit()
+        logger.debug(f"Working memory cleared for session {session_id}")
+
+    # ==================== PROCEDURAL MEMORY ====================
+
+    async def store_procedure(
+        self,
+        agent_id: str,
+        name: str,
+        steps: List[Dict[str, Any]],
+        description: str = None,
+        tags: List[str] = None
+    ) -> ProceduralMemory:
+        """Store or update a procedure for an agent."""
+        existing = self.db.query(ProceduralMemory).filter(
+            ProceduralMemory.agent_id == agent_id,
+            ProceduralMemory.name == name
+        ).first()
+
+        if existing:
+            existing.steps = steps
+            existing.description = description or existing.description
+            existing.tags = tags or existing.tags
+            existing.updated_at = datetime.utcnow()
+            self.db.commit()
+            return existing
+
+        proc = ProceduralMemory(
+            agent_id=agent_id,
+            name=name,
+            description=description,
+            steps=steps,
+            tags=tags or []
+        )
+        self.db.add(proc)
+        self.db.commit()
+        logger.info(f"Procedure stored: {agent_id}/{name}")
+        return proc
+
+    async def recall_procedure(
+        self,
+        agent_id: str,
+        name: str = None,
+        tags: List[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Recall procedures for an agent. Filter by name or tags."""
+        query = self.db.query(ProceduralMemory).filter(ProceduralMemory.agent_id == agent_id)
+
+        if name:
+            query = query.filter(ProceduralMemory.name == name)
+            proc = query.first()
+            if not proc:
+                return []
+            return [{"id": proc.id, "name": proc.name, "description": proc.description, "steps": proc.steps, "tags": proc.tags, "updated_at": proc.updated_at.isoformat() if proc.updated_at else None}]
+
+        if tags:
+            query = query.filter(ProceduralMemory.tags.contains(tags))
+
+        procs = query.order_by(ProceduralMemory.name).all()
+        return [{"id": p.id, "name": p.name, "description": p.description, "steps": p.steps, "tags": p.tags, "updated_at": p.updated_at.isoformat() if p.updated_at else None} for p in procs]
+
+    async def delete_procedure(self, agent_id: str, name: str):
+        """Delete a procedure."""
+        self.db.query(ProceduralMemory).filter(
+            ProceduralMemory.agent_id == agent_id,
+            ProceduralMemory.name == name
+        ).delete()
+        self.db.commit()
+
+    # ==================== GOVERNANCE ====================
+
+    async def mark_do_not_remember(self, user_id: str, key: str = None):
+        """Flag a memory as 'do not remember' — prevents future extraction."""
+        query = self.db.query(MemoryItem).filter(MemoryItem.user_id == user_id)
+        if key:
+            query = query.filter(MemoryItem.key == key)
+        for m in query.all():
+            m.do_not_remember = True
+        self.db.commit()
+        logger.info(f"Marked do_not_remember for user {user_id}", extra={"key": key})
+
+    async def forget(self, user_id: str, key: str = None, category: str = None):
+        """GDPR-style deletion of memories."""
+        query = self.db.query(MemoryItem).filter(MemoryItem.user_id == user_id)
+        if key:
+            query = query.filter(MemoryItem.key == key)
+        if category:
+            query = query.filter(MemoryItem.category == category)
+        count = query.delete()
+        self.db.commit()
+        logger.info(f"Forgot {count} memories for user {user_id}")
+        return count
+
+    async def run_ttl_cleanup(self):
+        """Remove all expired memories. Called by scheduler."""
+        now = datetime.utcnow()
+        expired_memories = self.db.query(MemoryItem).filter(
+            MemoryItem.expires_at != None,
+            MemoryItem.expires_at <= now
+        )
+        count_mem = expired_memories.count()
+
+        expired_working = self.db.query(WorkingMemory).filter(
+            WorkingMemory.expires_at != None,
+            WorkingMemory.expires_at <= now
+        )
+        count_wm = expired_working.count()
+
+        expired_memories.delete()
+        expired_working.delete()
+        self.db.commit()
+        if count_mem or count_wm:
+            logger.info(f"TTL cleanup: removed {count_mem} memories, {count_wm} working entries")
+        return count_mem + count_wm
+
+    async def get_context_for_call(self, user_id: str, organization_id: str = None, agent_id: str = None) -> str:
+        """
+        Build a context string for an agent about a user.
+        Now includes procedural memory for the agent.
+        Called at the start of a conversation to provide history.
+        """
+        # Get user profile
+        profile = self.db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+
+        # Get recent memories (skip do_not_remember)
+        memories = await self.get_user_memories(user_id, organization_id=organization_id)
+
+        # Get last conversation summary
+        last_summary = self.db.query(ConversationSummary).filter(
+            ConversationSummary.user_id == user_id
+        ).order_by(ConversationSummary.created_at.desc()).first()
+
+        context_parts = []
+
+        if profile:
+            context_parts.append(f"**Returning caller**: {profile.name or 'Unknown name'}")
+            context_parts.append(f"- Total previous calls: {int(profile.total_calls)}")
+            if profile.preferences:
+                context_parts.append(f"- Known preferences: {json.dumps(profile.preferences)}")
+        else:
+            context_parts.append("**New caller**: No previous interaction history")
+
+        if memories:
+            context_parts.append("\n**Known facts about this caller:**")
+            for category, items in memories.items():
+                context_parts.append(f"- {category}:")
+                for item in items[:5]:
+                    type_icon = "[✓]" if item['type'] in ['system_verified', 'regulated_fact'] else "[?]"
+                    context_parts.append(f"  {type_icon} {item['key']}: {item['value']} ({item['type']})")
+
+        if last_summary:
+            context_parts.append(f"\n**Last conversation ({last_summary.created_at.strftime('%Y-%m-%d')}):**")
+            context_parts.append(f"- Summary: {last_summary.summary}")
+            if last_summary.outcome:
+                context_parts.append(f"- Outcome: {last_summary.outcome}")
+
+        # Append procedural memory relevant to the agent
+        if agent_id:
+            procedures = await self.recall_procedure(agent_id)
+            if procedures:
+                context_parts.append(f"\n**Available procedures ({len(procedures)}):**")
+                for p in procedures[:3]:
+                    context_parts.append(f"- {p['name']}: {p.get('description', '')}")
+
+        return "\n".join(context_parts) if context_parts else ""
+
+    async def get_user_memories(
+        self,
+        user_id: str,
+        categories: List[str] = None,
+        organization_id: str = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get all memories for a user, grouped by category.
+        Respects do_not_remember flag.
+        """
+        query = self.db.query(MemoryItem).filter(
+            MemoryItem.user_id == user_id,
+            MemoryItem.do_not_remember == False
+        )
+        if organization_id:
+            query = query.filter(MemoryItem.organization_id == organization_id)
+
+        if categories:
+            query = query.filter(MemoryItem.category.in_(categories))
+
+        memories = query.order_by(MemoryItem.category, MemoryItem.updated_at.desc()).all()
+
+        result = {}
+        for memory in memories:
+            if memory.category not in result:
+                result[memory.category] = []
+            result[memory.category].append({
+                "key": memory.key,
+                "value": memory.value,
+                "type": memory.memory_type,
+                "confidence": memory.confidence,
+                "updated_at": memory.updated_at.isoformat() if memory.updated_at else None
+            })
+
+        return result
 
 
 # Singleton-ish factory function

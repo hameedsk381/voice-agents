@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Voise AI — Frontend
 
-## Getting Started
+Next.js 16 dashboard and marketing site for Voise AI.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router) · **React 19** · **TypeScript**
+- **Tailwind CSS v4** — light/dark themes via `ThemeContext`
+- **@xyflow/react** — workflow visual editor
+- **ultravox-client** — WebRTC voice in agent playground
+- **recharts** — analytics charts
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev    # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires backend on **port 8001**. API calls use same-origin `/api/v1` (proxied in `next.config.ts`):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```ts
+// next.config.ts rewrites /api/v1/* → BACKEND_URL (default http://localhost:8001)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Override with `NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1` if needed.
 
-## Learn More
+## Key routes
 
-To learn more about Next.js, take a look at the following resources:
+| Route | Purpose |
+|-------|---------|
+| `/` | Marketing landing |
+| `/login`, `/register` | Auth |
+| `/dashboard` | Overview |
+| `/dashboard/agents` | Agent list & detail (playground) |
+| `/dashboard/workflows` | Workflow list, editor (Visual / JSON / SAP / Test) |
+| `/dashboard/campaigns` | Campaigns + workflow picker on create |
+| `/dashboard/monitoring` | Live sessions |
+| `/dashboard/approvals` | HITL queue |
+| `/dashboard/settings` | Telephony, compliance, **Appearance** (theme) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project docs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See repo root [DOCS.md](../DOCS.md) and [WORKFLOW_AUTOMATION.md](../WORKFLOW_AUTOMATION.md).

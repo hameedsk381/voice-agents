@@ -81,3 +81,43 @@ async def get_recent_calls(
     from app.models.analytics import CallLog
     calls = db.query(CallLog).order_by(CallLog.start_time.desc()).limit(limit).all()
     return calls
+
+
+@router.get("/kpi")
+async def get_kpi_dashboard(
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db)
+):
+    """Comprehensive business KPI dashboard data."""
+    service = AnalyticsService(db)
+    return await service.get_kpi_dashboard(org_id=current_user.organization_id)
+
+
+@router.get("/peak-hours")
+async def get_peak_hours(
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db)
+):
+    """Call volume distribution by hour of day."""
+    service = AnalyticsService(db)
+    return await service.get_peak_hours(org_id=current_user.organization_id)
+
+
+@router.get("/quality")
+async def get_call_quality(
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db)
+):
+    """Overall call quality score with sub-scores."""
+    service = AnalyticsService(db)
+    return await service.get_call_quality(org_id=current_user.organization_id)
+
+
+@router.get("/weekly-trend")
+async def get_weekly_trend(
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db)
+):
+    """14-day trend of calls, minutes, cost, and latency."""
+    service = AnalyticsService(db)
+    return await service.get_weekly_trend(org_id=current_user.organization_id)

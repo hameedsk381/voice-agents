@@ -9,6 +9,8 @@ from app.models.analytics import CallLog
 from app.models.agent import Agent
 from app.services.compliance_service import redactor
 from app.services.llm.groq_provider import GroqLLM
+from app.core.metrics import calls_total, call_duration_seconds, cost_total
+from app.services.usage_service import UsageService
 import json
 import hashlib
 import hmac
@@ -18,6 +20,7 @@ class AnalyticsService:
     def __init__(self, db: Session):
         self.db = db
         self.classifier_llm = GroqLLM(model="llama-3.1-8b-instant")
+        self.usage = UsageService(db)
 
     async def log_call_completion(self, session_data: Dict[str, Any], agent: Optional[Agent] = None):
         """Saves final session metrics to persistent storage."""
@@ -34,6 +37,23 @@ class AnalyticsService:
         # Generate Immutable Signature (Elite Compliance Feature)
         signature = self.sign_transcript(redacted_transcript, session_data["session_id"])
 
+        # Prometheus metrics
+        calls_total.labels(agent_id=session_data["agent_id"], outcome=outcome).inc()
+        call_duration_seconds.labels(agent_id=session_data["agent_id"]).observe(session_data.get("duration", 0))
+        cost_total.labels(model=session_data.get("model_name", "unknown")).inc(session_data.get("cost", 0))
+
+        # Annotate with checkpoint metadata if available
+        metadata = dict(session_data.get("metadata") or {})
+        try:
+            from app.services.checkpoint_service import CheckpointService
+            ckpt = CheckpointService(self.db).load_latest(session_data["session_id"])
+            if ckpt:
+                metadata["checkpoint_turns"] = ckpt.turn_index
+                metadata["checkpoint_id"] = ckpt.id
+                metadata["recovered"] = True
+        except Exception:
+            pass
+
         call_log = CallLog(
             session_id=session_data["session_id"],
             agent_id=session_data["agent_id"],
@@ -47,15 +67,34 @@ class AnalyticsService:
             total_turns=session_data.get("turns", 0),
             total_tokens=session_data.get("tokens", 0),
             estimated_cost=session_data.get("cost", 0),
-            organization_id=session_data.get("org_id"), # Added for Multitenancy
+            organization_id=session_data.get("org_id"),
             status=session_data.get("status", "completed"),
             end_reason=session_data.get("reason", "normal"),
             outcome=outcome,
             outcome_reason=outcome_reason,
             transcript=redacted_transcript,
+            metadata_json=metadata,
             signature=signature
         )
         self.db.add(call_log)
+
+        # Record usage metering
+        org_id = session_data.get("org_id")
+        if org_id:
+            try:
+                self.usage.record_call_usage(
+                    organization_id=org_id,
+                    session_id=session_data["session_id"],
+                    agent_id=session_data["agent_id"],
+                    duration_seconds=session_data.get("duration", 0),
+                    stt_seconds=session_data.get("stt_seconds", 0),
+                    tts_seconds=session_data.get("tts_seconds", 0),
+                    llm_tokens=session_data.get("tokens", 0),
+                    tool_calls=session_data.get("tool_calls", 0),
+                )
+            except Exception:
+                pass
+
         self.db.commit()
         return call_log
 
@@ -174,6 +213,170 @@ class AnalyticsService:
             "details": violations,
             "turns_audited": len(audits)
         }
+    async def get_kpi_dashboard(self, org_id: Optional[str] = None) -> Dict[str, Any]:
+        """Comprehensive KPI dashboard data with business metrics."""
+        query = self.db.query(func.count(CallLog.id))
+        if org_id:
+            query = query.filter(CallLog.organization_id == org_id)
+        total_calls = query.scalar()
+
+        filters = {}
+        if org_id:
+            filters["organization_id"] = org_id
+
+        def _q():
+            q = self.db.query(CallLog)
+            if org_id:
+                q = q.filter(CallLog.organization_id == org_id)
+            return q
+
+        total_duration = _q().with_entities(func.sum(CallLog.duration_seconds)).scalar() or 0
+        avg_latency = _q().with_entities(func.avg(CallLog.avg_latency_ms)).scalar() or 0
+        total_cost = _q().with_entities(func.sum(CallLog.estimated_cost)).scalar() or 0
+        total_tokens = _q().with_entities(func.sum(CallLog.total_tokens)).scalar() or 0
+        total_turns = _q().with_entities(func.sum(CallLog.total_turns)).scalar() or 0
+
+        # Outcome breakdown
+        success_count = _q().filter(CallLog.outcome == "SUCCESS").count()
+        failure_count = _q().filter(CallLog.outcome == "FAILURE").count()
+        neutral_count = _q().filter(CallLog.outcome == "NEUTRAL").count()
+
+        # Abandoned / failed calls
+        abandoned = _q().filter(
+            CallLog.status.in_(["failed", "error"])
+        ).count()
+        short_calls = _q().filter(
+            CallLog.duration_seconds < 15,
+            CallLog.status != "failed",
+        ).count()
+
+        # Completed calls (for AHT)
+        completed = _q().filter(CallLog.status == "completed").count()
+        aht_query = _q().filter(CallLog.status == "completed").with_entities(
+            func.avg(CallLog.duration_seconds)
+        ).scalar() or 0
+
+        # Average turns per completed call
+        avg_turns = _q().filter(CallLog.status == "completed").with_entities(
+            func.avg(CallLog.total_turns)
+        ).scalar() or 0
+
+        cost_per_call = round(total_cost / total_calls, 4) if total_calls > 0 else 0
+        aht_seconds = round(aht_query, 1)
+        abandonment_rate = round(
+            ((abandoned + short_calls) / total_calls * 100), 1
+        ) if total_calls > 0 else 0
+        success_rate = round(
+            (success_count / total_calls * 100), 1
+        ) if total_calls > 0 else 0
+
+        return {
+            "total_calls": total_calls,
+            "total_minutes": round(total_duration / 60, 2),
+            "total_cost": round(total_cost, 4),
+            "total_tokens": total_tokens,
+            "avg_latency_ms": round(avg_latency, 2),
+            "cost_per_call": cost_per_call,
+            "avg_handle_time_sec": aht_seconds,
+            "avg_turns_per_call": round(avg_turns, 1),
+            "success_rate": success_rate,
+            "abandonment_rate": abandonment_rate,
+            "outcome_breakdown": {
+                "success": success_count,
+                "failure": failure_count,
+                "neutral": neutral_count,
+            },
+        }
+
+    async def get_peak_hours(self, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get call volume distribution by hour of day."""
+        q = self.db.query(
+            extract('hour', CallLog.start_time).label('hour'),
+            func.count(CallLog.id).label('count')
+        )
+        if org_id:
+            q = q.filter(CallLog.organization_id == org_id)
+        results = q.group_by(extract('hour', CallLog.start_time))\
+                   .order_by('hour').all()
+
+        hours = {h: 0 for h in range(24)}
+        for r in results:
+            hours[int(r.hour)] = r.count
+
+        peak_hour = max(hours, key=hours.get)
+        return {
+            "distribution": [{"hour": h, "count": c} for h, c in hours.items()],
+            "peak_hour": peak_hour,
+            "peak_volume": hours[peak_hour],
+        }
+
+    async def get_call_quality(self, org_id: Optional[str] = None) -> Dict[str, Any]:
+        """Compute call quality score from latency, duration, turns, and outcome."""
+        def _q():
+            q = self.db.query(CallLog)
+            if org_id:
+                q = q.filter(CallLog.organization_id == org_id)
+            return q
+
+        total = _q().count()
+        if total == 0:
+            return {"score": 0, "grade": "N/A", "latency_grade": "N/A", "turns_grade": "N/A"}
+
+        avg_lat = float(_q().with_entities(func.avg(CallLog.avg_latency_ms)).scalar() or 0)
+        avg_turns = float(_q().with_entities(func.avg(CallLog.total_turns)).scalar() or 0)
+        success_rate = _q().filter(CallLog.outcome == "SUCCESS").count() / total
+
+        # Latency score (0-100): lower is better, penalty above 500ms
+        lat_score = max(0, 100 - (avg_lat / 500 * 100)) if avg_lat > 0 else 100
+        # Turns score (0-100): 5-15 turns is ideal
+        turns_score = 100 - min(abs(avg_turns - 10) * 5, 100) if avg_turns > 0 else 100
+        # Outcome score
+        outcome_score = success_rate * 100
+
+        overall = round(lat_score * 0.3 + turns_score * 0.2 + outcome_score * 0.5, 1)
+
+        def grade(s):
+            if s >= 90: return "A"
+            if s >= 75: return "B"
+            if s >= 60: return "C"
+            if s >= 40: return "D"
+            return "F"
+
+        return {
+            "score": overall,
+            "grade": grade(overall),
+            "latency_ms": round(avg_lat, 0),
+            "latency_grade": grade(lat_score),
+            "avg_turns": round(avg_turns, 1),
+            "turns_grade": grade(turns_score),
+            "outcome_score": round(outcome_score, 1),
+        }
+
+    async def get_weekly_trend(self, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get daily call volume, duration, and cost for the last 14 days."""
+        start = datetime.utcnow() - timedelta(days=14)
+        q = self.db.query(
+            func.date(CallLog.start_time).label('date'),
+            func.count(CallLog.id).label('calls'),
+            func.sum(CallLog.duration_seconds).label('total_seconds'),
+            func.sum(CallLog.estimated_cost).label('total_cost'),
+            func.avg(CallLog.avg_latency_ms).label('avg_latency'),
+        ).filter(CallLog.start_time >= start)
+        if org_id:
+            q = q.filter(CallLog.organization_id == org_id)
+        results = q.group_by(func.date(CallLog.start_time)).order_by('date').all()
+
+        return [
+            {
+                "date": str(r.date),
+                "calls": r.calls,
+                "total_minutes": round((r.total_seconds or 0) / 60, 1),
+                "total_cost": round(r.total_cost or 0, 4),
+                "avg_latency_ms": round(r.avg_latency or 0, 0),
+            }
+            for r in results
+        ]
+
     async def get_shadow_stats(self) -> Dict[str, Any]:
         """Get statistics for shadow model comparisons."""
         from app.models.analytics import ShadowLog

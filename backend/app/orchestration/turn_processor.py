@@ -17,6 +17,7 @@ from app.services.llm.enterprise_llm import EnterpriseLLM
 from app.services.tts.qwen_provider import QwenTTS
 from app.services.stt.factory import get_stt_provider
 from app.services.memory import get_memory_service
+from app.core.telemetry import get_tracer, persist_span, async_trace_span
 from app.orchestration.turn_metrics import TurnMetrics
 from app.orchestration.agent_swarm import SwarmOrchestrator
 from app.orchestration.session_manager import session_manager
@@ -30,13 +31,31 @@ from app.services.compliance_service import compliance_validator, redactor, get_
 from app.services.voice_ux_service import VoiceUXService
 from app.services.shadow_service import ShadowComparisonService
 from app.services.knowledge_service import KnowledgeService
+from app.services.checkpoint_service import CheckpointService
+from app.services.audit_service import AuditService
 from app.orchestration.tool_planner import get_tool_planner
-from app.models.compliance import AuditLog
+from app.core.metrics import turn_latency_ms, errors_total
 from app.orchestration.tool_executor import execute_tool
+from app.orchestration.inter_agent_bus import inter_agent_bus
+from app.services.emotion_service import EmotionTracker
+from app.services.end_of_call_service import EndOfCallService
 
 # Instantiate default providers once
 stt_service = get_stt_provider()
 tts_service = QwenTTS()
+
+# Model cost rates ($ per 1M input tokens)
+MODEL_COST_RATES: Dict[str, float] = {
+    "llama-3.3-70b-versatile": 0.59,
+    "llama-3.1-8b-instant": 0.18,
+    "llama-3.2-3b-preview": 0.06,
+    "mixtral-8x7b-32768": 0.24,
+    "gemma2-9b-it": 0.20,
+    "gpt-4o": 2.50,
+    "gpt-4o-mini": 0.15,
+    "claude-3-5-sonnet": 3.00,
+    "claude-3-haiku": 0.25,
+}
 
 async def send_with_tts(
     websocket: WebSocket,
@@ -46,15 +65,16 @@ async def send_with_tts(
     sentiment_score: float = None,
     sent_tracker: list = None,
     metrics: TurnMetrics = None,
+    tone_hint: str = None,
 ):
-    """Send text response with TTS audio (sentiment-aware)."""
+    """Send text response with TTS audio (sentiment + emotion aware)."""
     if sent_tracker is not None:
         sent_tracker.append(text)
     await websocket.send_json({"type": "text_chunk", "text": text})
     
-    # Infer instruction from sentiment
-    instruct = None
-    if sentiment_score is not None:
+    # Infer instruction from sentiment or tone hint
+    instruct = tone_hint
+    if not instruct and sentiment_score is not None:
         if sentiment_score < 0.3:
             instruct = "empathetic, soft, apologetic"
         elif sentiment_score > 0.8:
@@ -192,7 +212,18 @@ class TurnProcessor:
         self.voice_ux = VoiceUXService(tts_service)
         self.shadow_service = ShadowComparisonService(db)
 
+        # Phase 8: Emotional tracking
+        self.emotion_tracker = EmotionTracker(window_size=5)
+
+        # Phase 8: End-of-call intelligence
+        self.end_of_call = EndOfCallService(db, llm_service=self.llm_service)
+
+        # Phase 8: Cost tracking
+        self.current_model_name = "llama-3.3-70b-versatile"
+        self.cost_per_1m_input = MODEL_COST_RATES.get(self.current_model_name, 0.59)
+
         # Context setup
+        now = datetime.utcnow()
         user_context = ""
         self.context = AgentContext(
             session_id=session_id,
@@ -204,23 +235,74 @@ class TurnProcessor:
             confidence=ConfidenceScores(),
             memory=[],
             sentiment_slope=0.8,
+            call_started_at=now,
             metadata={"org_id": self.org_id}
         )
 
         # Tracking state
-        self.session_start_dt = datetime.utcnow()
+        self.session_start_dt = now
         self.latencies: List[float] = []
         self.turn_count = 0
         self.token_count = 0
         self._sent_buffer: list = []
+        self._tracer = get_tracer("turn_processor")
+        self._inter_agent_listener_task: Optional[asyncio.Task] = None
 
     async def initialize_context(self):
-        """Asynchronously load memory context from database."""
+        """Asynchronously load memory context and checkpoint from database."""
+        # Attempt crash recovery from latest checkpoint
+        try:
+            ckpt_service = CheckpointService(self.db)
+            previous_state = ckpt_service.resume_state(self.session_id)
+            if previous_state:
+                history = previous_state.get("history", [])
+                turn_count = previous_state.get("turn_count", 0)
+                self.context.history = history
+                self.turn_count = turn_count
+                self.token_count = previous_state.get("token_count", 0)
+                self.latencies = previous_state.get("latencies", [])
+                if previous_state.get("current_state"):
+                    self.context.current_state = previous_state["current_state"]
+                logger.info(
+                    f"Recovered session {self.session_id} from checkpoint "
+                    f"(turn {turn_count}, {len(history)} messages)"
+                )
+        except Exception as e:
+            logger.warning(f"Checkpoint recovery skipped (non-fatal): {e}")
+
         if self.caller_id:
-            user_context = await self.memory_service.get_context_for_call(self.caller_id, organization_id=self.org_id)
+            user_context = await self.memory_service.get_context_for_call(
+                self.caller_id,
+                organization_id=self.org_id,
+                agent_id=self.agent_id
+            )
             if user_context:
                 self.context.memory = [user_context]
-                logger.info(f"Loaded memory context for user {self.caller_id} (Org: {self.org_id})")
+                logger.info(f"Loaded memory context for user {self.caller_id} (Org: {self.org_id}, Agent: {self.agent_id})")
+
+        # Start InterAgentBus listener for this agent
+        try:
+            self._inter_agent_listener_task = asyncio.create_task(
+                self._listen_inter_agent_messages()
+            )
+            logger.info(f"InterAgentBus listener started for agent {self.agent_id}")
+        except Exception as e:
+            logger.warning(f"InterAgentBus listener failed to start (non-fatal): {e}")
+
+    async def _listen_inter_agent_messages(self):
+        """Listen for inter-agent messages from the bus."""
+        async def handler(message: dict):
+            msg_type = message.get("type")
+            if msg_type == "task_delegation":
+                task = message.get("payload", {}).get("task", "")
+                logger.info(f"InterAgentBus: received task delegation: {task}")
+            elif msg_type == "agent_hired":
+                hired_by = message.get("payload", {}).get("by", "unknown")
+                task = message.get("payload", {}).get("task", "")
+                logger.info(f"InterAgentBus: hired by {hired_by} for task: {task}")
+            return None  # No reply needed for fire-and-forget
+
+        await inter_agent_bus.listen(self.agent_id, handler)
 
     def is_fast_path_turn(self, text: str) -> Optional[str]:
         """Check for turns that don't need expensive LLM reasoning."""
@@ -239,6 +321,12 @@ class TurnProcessor:
         return acknowledgements.get(text_lower)
 
     async def _emit_turn_metrics(self, metrics: TurnMetrics) -> None:
+        turn_latency_ms.labels(phase="stt").observe(metrics.stt_ms)
+        turn_latency_ms.labels(phase="understand").observe(metrics.understand_ms)
+        turn_latency_ms.labels(phase="llm").observe(metrics.llm_ms)
+        turn_latency_ms.labels(phase="tool").observe(metrics.tool_ms)
+        turn_latency_ms.labels(phase="tts").observe(metrics.tts_ms)
+        turn_latency_ms.labels(phase="total").observe(metrics.total_ms)
         payload = metrics.to_dict()
         logger.info(f"turn_metrics {json.dumps(payload)}")
         await self.websocket.send_json({"type": "turn_metrics", **payload})
@@ -251,7 +339,13 @@ class TurnProcessor:
         stt_ms: float = 0.0,
     ):
         """Process a single turn of conversation."""
-        turn_start = time.perf_counter()
+        async with async_trace_span(self._tracer, "turn_processor.process_turn", {
+            "session_id": self.session_id,
+            "turn_index": self.turn_count + 1,
+            "agent_id": self.agent_id,
+            "stt_confidence": stt_confidence,
+        }):
+            turn_start = time.perf_counter()
         self.turn_count += 1
         metrics = TurnMetrics(
             session_id=self.session_id,
@@ -268,9 +362,28 @@ class TurnProcessor:
             # Reset sent buffer for this turn
             self._sent_buffer = []
             
-            # Update Sentiment Slope (Moving Average)
+            # Phase 8: Multi-Signal Emotional Tracking
             current_sentiment = self.orchestrator.analyze_sentiment(user_input)
             self.context.sentiment_slope = (self.context.sentiment_slope * 0.7) + (current_sentiment * 0.3)
+
+            emotion_state = self.emotion_tracker.analyze_turn(
+                text=user_input,
+                silence_duration=self.context.silence_accumulated_seconds,
+                interrupt_frequency=(
+                    self.context.interrupt_count / max(1, self.turn_count)
+                ),
+                turn_cadence=(
+                    self.context.call_elapsed_seconds / max(1, self.turn_count)
+                ),
+            )
+            self.context.frustration_level = emotion_state.frustration_level
+            self.context.emotion_history.append({
+                "turn": self.turn_count,
+                "state": emotion_state.to_dict(),
+            })
+            self.context.hesitation_markers += (
+                1 if emotion_state.hesitation_level > 0.4 else 0
+            )
 
             # 2. Fast Path Check (Elite Feature)
             fast_response = self.is_fast_path_turn(user_input)
@@ -438,14 +551,44 @@ class TurnProcessor:
             
             # NORMAL AI RESPONSE
             if not full_response:
-                system_prompt = f"{self.active_persona}{knowledge_context}\n\nIMPORTANT: Respond only in {self.session_language}."
+                # Inject memory context into prompt
+                memory_context = ""
+                if self.context.memory:
+                    memory_context = f"\n\n**Caller Context:**\n" + "\n".join(self.context.memory)
+
+                # Phase 8: Time-awareness — inject remaining budget into prompt
+                time_context = ""
+                if self.context.is_near_call_end:
+                    time_context = "\n\nNOTE: This call is almost over. Keep responses short and avoid introducing new topics."
+                elif self.context.call_elapsed_seconds > self.context.call_duration_budget_seconds * 0.7:
+                    time_context = "\n\nNOTE: The call is running long. Aim for concise responses."
+
+                # Phase 8: Emotional adaptation — inject tone guidance
+                emotion_hint = self.emotion_tracker.get_adaptation_hint()
+                tone_context = f"\n\nTone: {emotion_hint['tone']}. Pace: {emotion_hint['pace']}."
+
+                system_prompt = f"{self.active_persona}{memory_context}{knowledge_context}{time_context}{tone_context}\n\nIMPORTANT: Respond only in {self.session_language}."
                 await session_manager.set_floor_owner(self.session_id, "agent")
                 await self.websocket.send_json({"type": "start_response"})
                 
-                # elite cost awareness
-                if self.token_count > (self.agent.token_limit or 50000):
-                    logger.warning(f"TOKEN BUDGET EXCEEDED ({self.token_count}). Switching to fallback model: {self.agent.fallback_model}")
+                # Phase 8: Cost-aware model downgrade with real-time cost calc
+                self.context.tokens_used = self.token_count
+                # Estimate cost: input ~70% of total tokens
+                estimated_input_tokens = int(self.token_count * 0.7)
+                estimated_cost = (estimated_input_tokens / 1_000_000) * self.cost_per_1m_input
+                self.context.estimated_cost = estimated_cost
+
+                if self.context.is_exceeding_cost_budget:
+                    logger.warning(
+                        f"COST BUDGET EXCEEDED (${estimated_cost:.4f} / ${self.context.cost_budget:.2f}). "
+                        f"Switching to fallback: {self.agent.fallback_model}"
+                    )
                     self.llm_service.model = self.agent.fallback_model or "llama-3.1-8b-instant"
+                    self.cost_per_1m_input = MODEL_COST_RATES.get(self.llm_service.model, 0.18)
+                elif self.token_count > (self.agent.token_limit or 50000) * 0.75:
+                    logger.info(f"APPROACHING TOKEN LIMIT ({self.token_count}). Pre-emptive model downgrade.")
+                    self.llm_service.model = self.agent.fallback_model or "llama-3.1-8b-instant"
+                    self.cost_per_1m_input = MODEL_COST_RATES.get(self.llm_service.model, 0.18)
 
                 try:
                     # Voice UX: Send a "filler" if we expect a long reasoning path
@@ -469,7 +612,6 @@ class TurnProcessor:
                     elif self.tool_schemas and hasattr(self.llm_service, 'generate_with_tools'):
                         response_path = "tools"
                         planner = get_tool_planner()
-                        # Hybrid Approach: Use planner to decide and explain, or use LLM tool calling
                         plan_statement, tool_calls = await planner.generate_plan(user_input, self.context.history, self.tool_schemas)
                         
                         if plan_statement:
@@ -481,12 +623,16 @@ class TurnProcessor:
                             )
                             logger.info(f"Speaking Plan: {plan_statement}")
                         
-                        # If planner didn't find tools, fallback to standard tool generation
                         if not tool_calls:
+                            t0 = time.perf_counter()
                             text_response, tool_calls = await asyncio.wait_for(
                                 self.llm_service.generate_with_tools(user_input, system_prompt, self.context.history, tools=self.tool_schemas),
                                 timeout=LATENCY_BUDGET
                             )
+                            persist_span(self.session_id, "llm.generate_with_tools", "llm",
+                                (time.perf_counter() - t0) * 1000,
+                                {"model": self.llm_service.model, "agent_id": self.agent_id},
+                                agent_id=self.agent_id, organization_id=self.org_id)
                         
                         if tool_calls:
                             if self.orchestrator.policy_engine:
@@ -495,15 +641,23 @@ class TurnProcessor:
                             tool_results = []
                             for tc in tool_calls:
                                 tool_start = time.perf_counter()
-                                await self.websocket.send_json({"type": "tool_call", "arguments": tc["arguments"]})
-                                result = await execute_tool(tc["name"], tc["arguments"], self.db, self.agent_id, self.session_id)
-                                metrics.tool_ms += (time.perf_counter() - tool_start) * 1000
-                                tool_results.append({"tool": tc["name"], "result": result})
+                                await self.websocket.send_json({"type": "tool_call", "name": tc.get("name"), "arguments": tc.get("arguments", {})})
+                                result_dict = await execute_tool(tc.get("name", ""), tc.get("arguments", {}), self.db, self.agent_id, self.session_id)
+                                tool_elapsed = (time.perf_counter() - tool_start) * 1000
+                                metrics.tool_ms += tool_elapsed
+                                persist_span(self.session_id, f"tool.{tc.get('name')}", "tool",
+                                    tool_elapsed, {"tool_name": tc.get("name"), "confidence": result_dict.get("confidence")},
+                                    agent_id=self.agent_id, organization_id=self.org_id)
+                                tool_results.append(result_dict)
+                                
+                                # Update context confidence from tool result
+                                if not result_dict.get("error") and result_dict.get("confidence", 1.0) < 0.5:
+                                    self.context.confidence.tool_result = result_dict["confidence"]
                             
                             if self.orchestrator.policy_engine:
                                 self.context.current_state = self.orchestrator.policy_engine.get_next_state(self.context.current_state, "tool_complete")
                             
-                            tool_context = "\n".join([f"[Tool: {tr['tool']}] Result: {tr['result']}" for tr in tool_results])
+                            tool_context = "\n".join([f"[Tool: {tr.get('name')}] Result: {tr.get('result', '')}" for tr in tool_results])
                             full_response = await stream_response_with_tts(
                                 self.websocket,
                                 self.llm_service.generate_stream(f"Based on: {tool_context}", system_prompt, self.context.history),
@@ -518,6 +672,7 @@ class TurnProcessor:
                     # Default Stream
                     else:
                         response_path = "standard_stream"
+                        t0 = time.perf_counter()
                         full_response = await stream_response_with_tts(
                             self.websocket,
                             self.llm_service.generate_stream(user_input, system_prompt, self.context.history),
@@ -525,6 +680,10 @@ class TurnProcessor:
                             sentiment_score=self.context.sentiment_slope,
                             sent_tracker=self._sent_buffer, metrics=metrics,
                         )
+                        persist_span(self.session_id, "llm.generate_stream", "llm",
+                            (time.perf_counter() - t0) * 1000,
+                            {"model": self.llm_service.model, "agent_id": self.agent_id},
+                            agent_id=self.agent_id, organization_id=self.org_id)
                         response_sent = True
 
                 except asyncio.TimeoutError:
@@ -597,6 +756,33 @@ class TurnProcessor:
             # Update Token Count
             turn_tokens = int((len(user_input.split()) + len(full_response.split())) * 1.3)
             self.token_count += turn_tokens
+            self.context.tokens_used = self.token_count
+
+            # Phase 8: Real-time cost estimation
+            estimated_input_tokens = int(self.token_count * 0.7)
+            self.context.estimated_cost = (
+                estimated_input_tokens / 1_000_000
+            ) * self.cost_per_1m_input
+
+            # Durable checkpoint — save after every completed turn
+            try:
+                ckpt_service = CheckpointService(self.db)
+                ckpt_service.save(
+                    session_id=self.session_id,
+                    agent_id=self.agent_id,
+                    turn_index=self.turn_count,
+                    state={
+                        "history": self.context.history,
+                        "current_state": self.context.current_state,
+                        "turn_count": self.turn_count,
+                        "token_count": self.token_count,
+                        "latencies": self.latencies,
+                        "sentiment_slope": getattr(self.context, "sentiment_slope", None),
+                    },
+                    summary=full_response[:200] if full_response else None,
+                )
+            except Exception as e:
+                logger.warning(f"Checkpoint save failed (non-fatal): {e}")
             logger.info(f"Turn Tokens: {turn_tokens}, Total Session Tokens: {self.token_count}")
             
             # 9. Compliance & Audit (Shadow Audit)
@@ -617,20 +803,19 @@ class TurnProcessor:
                     
                     def save_audit():
                         with SessionLocal() as local_db:
-                            audit_log = AuditLog(
+                            audit_service = AuditService(local_db)
+                            audit_service.append(
                                 session_id=self.session_id,
+                                agent_id=self.agent_id,
                                 turn_index=self.turn_count,
                                 user_message=redactor.redact_text(user_input),
                                 ai_response=redactor.redact_text(full_response),
                                 is_compliant=audit_result.is_compliant,
                                 violations=[v.dict() for v in audit_result.violations],
                                 risk_score=audit_result.risk_score,
-                                agent_id=self.agent_id,
                                 organization_id=self.org_id,
-                                state_name=self.context.current_state
+                                state_name=self.context.current_state,
                             )
-                            local_db.add(audit_log)
-                            local_db.commit()
                             
                     await run_in_threadpool(save_audit)
                     
@@ -659,6 +844,12 @@ class TurnProcessor:
                 tools=self.tool_schemas if is_reasoning_path else None
             ))
             
+            # Record turn span in persistent storage
+            persist_span(self.session_id, "turn", "turn", latency,
+                {"turn_index": self.turn_count, "path": response_path,
+                 "tokens": turn_tokens, "confidence": metrics.confidence_vector.get("overall", 0)},
+                agent_id=self.agent_id, organization_id=self.org_id)
+            
             await self.websocket.send_json({"type": "end_response"})
             logger.info(f"Turn {self.turn_count} complete. Latency: {latency:.2f}ms. Compliance: {len(self.latencies)}")
 
@@ -676,6 +867,7 @@ class TurnProcessor:
         except Exception as e:
             correlation_id = str(uuid.uuid4())[:8]
             logger.exception(f"Error in turn [CID: {correlation_id}]: {e}")
+            errors_total.labels(error_type=type(e).__name__, source="turn_processor").inc()
             await self.websocket.send_json({
                 "type": "error", 
                 "message": f"An error occurred while generating the response. Reference: {correlation_id}"
@@ -695,11 +887,27 @@ class TurnProcessor:
                 "avg_latency": avg_lat,
                 "turns": self.turn_count,
                 "tokens": self.token_count,
+                "cost": round(self.context.estimated_cost, 4),
+                "model_name": self.current_model_name,
                 "org_id": self.org_id,
                 "status": "completed",
                 "transcript": self.context.history
             }, agent=self.agent)
-            
+
+            # Phase 8: End-of-Call Intelligence
+            call_summary = await self.end_of_call.analyze(
+                transcript=self.context.history,
+                context=self.context,
+                agent=self.agent,
+            )
+            await self.end_of_call.save_to_db(
+                session_id=self.session_id,
+                agent_id=self.agent_id,
+                caller_id=self.caller_id,
+                summary=call_summary,
+                organization_id=self.org_id,
+            )
+
             # Post-Call Memory Governance
             if self.caller_id:
                 # 1. Summarize
@@ -722,6 +930,11 @@ class TurnProcessor:
                     organization_id=self.org_id
                 )
 
+            # Clear working memory for this session
+            await self.memory_service.clear_working(self.session_id)
+
+            if self._inter_agent_listener_task and not self._inter_agent_listener_task.done():
+                self._inter_agent_listener_task.cancel()
             await session_manager.end_session(self.session_id, "client_disconnect")
         except Exception as e:
             logger.error(f"Cleanup Error: {e}")

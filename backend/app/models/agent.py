@@ -15,7 +15,7 @@ class Agent(Base):
     organization_id = Column(String, index=True, nullable=True) # Multitenancy
     
     # Configuration
-    language = Column(String, default="en-US")
+    language = Column(String, default="en-IN")
     tools = Column(JSON, default=list) # List of enabled tool names/configs
     goals = Column(JSON, default=list) # List of goals
     success_criteria = Column(JSON, default=list) # e.g. ["payment_confirmed"]
@@ -60,13 +60,3 @@ class AgentVersion(Base):
     # A/B Testing & Rollout
     weight = Column(Integer, default=0) # 0-100 percentage for routing
     is_canary = Column(Boolean, default=False)
-
-class Workflow(Base):
-    __tablename__ = "workflows"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String)
-    description = Column(String, nullable=True)
-    definition = Column(JSON) # The workflow graph/steps
-    
-    created_at = Column(DateTime, default=datetime.utcnow)

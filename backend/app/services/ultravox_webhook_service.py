@@ -164,6 +164,21 @@ class UltravoxWebhookService:
             "outcome": call_log.outcome if call_log else None,
         })
 
+        workflow_advanced = {"advanced": 0, "skipped": True}
+        if contact_id:
+            from app.services.workflow_service import WorkflowService
+
+            wf_service = WorkflowService(self.db)
+            workflow_advanced = await wf_service.advance_on_call_ended(
+                contact_id=str(contact_id),
+                analytics_outcome=call_log.outcome if call_log else None,
+                end_reason=str(end_reason),
+                short_summary=short_summary,
+                session_id=session_id,
+                call_id=str(call_id),
+                organization_id=metadata.get("org_id"),
+            )
+
         logger.info(f"Finalized session {session_id} from Ultravox call.ended ({call_id})")
         return {
             "ok": True,
@@ -171,4 +186,5 @@ class UltravoxWebhookService:
             "session_id": session_id,
             "call_id": call_id,
             "outcome": call_log.outcome if call_log else None,
+            "workflow": workflow_advanced,
         }

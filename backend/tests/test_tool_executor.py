@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from app.orchestration.tool_executor import execute_tool, validate_arguments
-from app.services.tools.base import BaseTool
+from app.services.tools.base import BaseTool, ToolResult
 
 
 class MockTool(BaseTool):
@@ -17,8 +17,8 @@ class MockTool(BaseTool):
     }
     requires_approval = False
 
-    async def execute(self, name: str, age: int = None) -> str:
-        return f"Hello {name}, age {age}"
+    async def execute(self, name: str, age: int = None) -> ToolResult:
+        return ToolResult(result=f"Hello {name}, age {age}", confidence=0.95, metadata={"name": name})
 
 
 class MockApprovalTool(BaseTool):
@@ -33,8 +33,8 @@ class MockApprovalTool(BaseTool):
     }
     requires_approval = True
 
-    async def execute(self, action: str) -> str:
-        return f"Executed: {action}"
+    async def execute(self, action: str) -> ToolResult:
+        return ToolResult(result=f"Executed: {action}", confidence=0.9)
 
 
 @pytest.fixture(autouse=True)
@@ -82,7 +82,9 @@ async def test_execute_tool_success():
          patch("app.orchestration.tool_executor.mcp_client") as mock_mcp:
         mock_mcp.list_tools = AsyncMock(return_value=[])
         result = await execute_tool("test_tool", {"name": "Alice", "age": 30}, MagicMock(), "agent-1", "session-1")
-        assert result == "Hello Alice, age 30"
+        assert result["result"] == "Hello Alice, age 30"
+        assert result["confidence"] == 0.95
+        assert not result["error"]
 
 
 @pytest.mark.asyncio
@@ -92,7 +94,8 @@ async def test_execute_tool_validation_failure():
          patch("app.orchestration.tool_executor.mcp_client") as mock_mcp:
         mock_mcp.list_tools = AsyncMock(return_value=[])
         result = await execute_tool("test_tool", {}, MagicMock(), "agent-1", "session-1")
-        assert "Missing required argument" in result
+        assert "Missing required argument" in result["result"]
+        assert result["error"]
 
 
 @pytest.mark.asyncio
@@ -106,7 +109,8 @@ async def test_execute_tool_requires_approval():
          patch("app.orchestration.tool_executor.HITLService", return_value=mock_hitl):
         mock_mcp.list_tools = AsyncMock(return_value=[])
         result = await execute_tool("approval_tool", {"action": "refund"}, MagicMock(), "agent-1", "session-1")
-        assert "requires human authorization" in result
+        assert "requires human authorization" in result["result"]
+        assert not result["error"]
 
 
 @pytest.mark.asyncio
@@ -121,18 +125,19 @@ async def test_execute_tool_retry_and_succeed():
             super().__init__()
             self.call_count = 0
 
-        async def execute(self, x: str) -> str:
+        async def execute(self, x: str) -> ToolResult:
             self.call_count += 1
             if self.call_count == 1:
                 raise TimeoutError("DB timeout")
-            return f"Result: {x}"
+            return ToolResult(result=f"Result: {x}", confidence=0.98)
 
     tool = RetryTool()
     with patch("app.orchestration.tool_executor.AVAILABLE_TOOLS", {"retry_tool": tool}), \
          patch("app.orchestration.tool_executor.mcp_client") as mock_mcp:
         mock_mcp.list_tools = AsyncMock(return_value=[])
         result = await execute_tool("retry_tool", {"x": "test"}, MagicMock(), "agent-1", "session-1")
-        assert result == "Result: test"
+        assert result["result"] == "Result: test"
+        assert result["confidence"] == 0.98
         assert tool.call_count == 2
 
 
@@ -144,7 +149,7 @@ async def test_execute_tool_retry_exhausted():
         parameters = {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}
         requires_approval = False
 
-        async def execute(self, x: str) -> str:
+        async def execute(self, x: str) -> ToolResult:
             raise ConnectionError("Connection refused")
 
     tool = AlwaysFailsTool()
@@ -152,7 +157,8 @@ async def test_execute_tool_retry_exhausted():
          patch("app.orchestration.tool_executor.mcp_client") as mock_mcp:
         mock_mcp.list_tools = AsyncMock(return_value=[])
         result = await execute_tool("always_fails", {"x": "test"}, MagicMock(), "agent-1", "session-1")
-        assert "execution failed" in result
+        assert "execution failed" in result["result"]
+        assert result["error"]
 
 
 @pytest.mark.asyncio
@@ -161,4 +167,5 @@ async def test_execute_tool_not_found():
          patch("app.orchestration.tool_executor.mcp_client") as mock_mcp:
         mock_mcp.list_tools = AsyncMock(return_value=[])
         result = await execute_tool("nonexistent", {}, MagicMock(), "agent-1", "session-1")
-        assert "not found" in result
+        assert "not found" in result["result"]
+        assert result["error"]

@@ -59,6 +59,74 @@ def test_build_twilio_call_overrides():
     assert overrides["languageHint"] == "en-US"
 
 
+def test_build_inactivity_messages_defaults():
+    from app.orchestration.ultravox_call import build_inactivity_messages
+    messages = build_inactivity_messages()
+    assert len(messages) == 2
+    assert messages[0]["endBehaviour"] == "END_BEHAVIOR_UNSPECIFIED"
+    assert messages[1]["endBehaviour"] == "END_BEHAVIOR_HANG_UP_SOFT"
+    assert messages[1]["duration"] == "120s"
+
+
+def test_build_inactivity_messages_custom():
+    from app.orchestration.ultravox_call import build_inactivity_messages
+    messages = build_inactivity_messages(
+        timeout_seconds=60,
+        warning_message="Hello?",
+        final_message="Bye!",
+    )
+    assert len(messages) == 2
+    assert messages[0]["message"] == "Hello?"
+    assert messages[1]["message"] == "Bye!"
+    assert messages[1]["duration"] == "60s"
+
+
+def test_build_initial_messages():
+    from app.orchestration.ultravox_call import build_initial_messages
+    result = build_initial_messages([
+        {"role": "user", "text": "Hi there"},
+        {"role": "assistant", "text": "Hello! How can I help?"},
+    ])
+    assert result is not None
+    assert len(result) == 2
+    assert result[0]["role"] == "user"
+
+
+def test_build_initial_messages_empty():
+    from app.orchestration.ultravox_call import build_initial_messages
+    assert build_initial_messages(None) is None
+    assert build_initial_messages([]) is None
+
+
+def test_build_per_call_overrides():
+    from app.orchestration.ultravox_call import build_per_call_overrides
+    overrides = build_per_call_overrides(
+        temperature=0.7,
+        max_duration="1800s",
+        recording_enabled=False,
+        join_timeout="30s",
+        initial_messages=[{"role": "user", "text": "Hello"}],
+        initial_state={"step": "greeting"},
+    )
+    assert overrides["temperature"] == 0.7
+    assert overrides["maxDuration"] == "1800s"
+    assert overrides["recordingEnabled"] is False
+    assert overrides["joinTimeout"] == "30s"
+    assert overrides["initialMessages"][0]["text"] == "Hello"
+    assert overrides["initialState"]["step"] == "greeting"
+
+
+def test_twilio_call_overrides_with_initial_state():
+    from app.orchestration.ultravox_call import build_twilio_call_overrides
+    overrides = build_twilio_call_overrides(
+        "wss://ws.example",
+        outgoing_to="+15551111",
+        outgoing_from="+15552222",
+        initial_state={"agent_id": "a1"},
+    )
+    assert overrides["initialState"]["agent_id"] == "a1"
+
+
 def test_build_call_template_prompt_only():
     agent = _fake_agent(config={"greeting": "Hello from Voise AI"})
     template = build_call_template(
@@ -71,6 +139,8 @@ def test_build_call_template_prompt_only():
     assert template["voice"] == "Mark"
     assert "selectedTools" not in template
     assert "firstSpeakerSettings" not in template
+    assert "inactivityMessages" in template
+    assert len(template["inactivityMessages"]) == 2
 
 
 def test_build_template_context():

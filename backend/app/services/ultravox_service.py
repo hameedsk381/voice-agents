@@ -53,6 +53,10 @@ class UltravoxService:
                 json=json,
                 headers=self._headers(),
             )
+            if response.is_error:
+                logger.error(f"Ultravox API {method} {path} -> {response.status_code}: {response.text}")
+            if response.status_code == 402:
+                logger.error(f"402 Payment Required. URL: {url}, Payload: {kwargs.get('json')}")
             response.raise_for_status()
             if not response.content:
                 return {}
@@ -196,23 +200,79 @@ class UltravoxService:
 
         return await self.create_call(payload)
 
-    async def list_voices(self) -> List[Dict[str, Any]]:
+    async def count_active_calls(self) -> int:
+        """Count currently active (live/in-progress) calls via Ultravox API."""
+        if not self.enabled:
+            return 0
+        try:
+            params: Dict[str, Any] = {"limit": 100, "offset": 0}
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    self._url("/calls"),
+                    params=params,
+                    headers=self._headers(),
+                )
+                response.raise_for_status()
+                data = response.json()
+            calls = []
+            if isinstance(data, dict):
+                calls = data.get("results") or data.get("calls") or []
+            elif isinstance(data, list):
+                calls = data
+            return sum(1 for c in calls if c.get("state") in ("active", "in_progress", "connecting"))
+        except Exception:
+            return 0
+
+    async def list_calls(
+        self,
+        *,
+        agent_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """List Ultravox calls with optional agent_id filter."""
+        if not self.enabled:
+            return []
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        if agent_id:
+            params["agentId"] = agent_id
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(
+                self._url("/calls"),
+                params=params,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            data = response.json()
+        if isinstance(data, dict):
+            return data.get("results") or data.get("calls") or []
+        if isinstance(data, list):
+            return data
+        return []
+
+    async def list_voices(self, primaryLanguage: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Returns normalized voice list for frontend compatibility.
+        Returns normalised voice list for frontend compatibility.
+        Supports optional BCP47 primaryLanguage filter.
         """
         if not self.enabled:
             return []
 
+        params: Dict[str, str] = {}
+        if primaryLanguage:
+            params["primaryLanguage"] = primaryLanguage
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(
                 self._url("/voices"),
+                params=params,
                 headers={"X-API-Key": self.api_key or ""},
             )
             response.raise_for_status()
             data = response.json()
 
         if isinstance(data, dict):
-            voices_raw = data.get("voices") or data.get("items") or []
+            voices_raw = data.get("results") or data.get("voices") or data.get("items") or []
         elif isinstance(data, list):
             voices_raw = data
         else:
@@ -232,6 +292,7 @@ class UltravoxService:
                     "type": "cloned" if ownership == "private" else "standard",
                     "provider": item.get("provider"),
                     "preview_url": item.get("previewUrl"),
+                    "primaryLanguage": item.get("primaryLanguage", ""),
                 }
             )
 
@@ -242,7 +303,7 @@ class UltravoxService:
         file_path: str,
         name: str,
         description: Optional[str] = None,
-        language: str = "en-US",
+        language: str = "en-IN",
     ) -> Optional[str]:
         """
         Create a cloned voice using Ultravox voice-cloning API.

@@ -1,8 +1,31 @@
-
-
-# 🧩 Complete Feature List
+# Complete Feature List
 
 ## Enterprise Voice AI & Agent Orchestration Platform
+
+> **Doc index:** [DOCS.md](./DOCS.md) · **Last updated:** May 2026
+
+---
+
+## Implementation status (shipped in repo)
+
+| Category | Shipped | Notes |
+|----------|---------|--------|
+| Ultravox voice runtime + Twilio | ✅ | Default `VOICE_RUNTIME=ultravox` |
+| Agent CRUD, playground, knowledge (RAG) | ✅ | Ultravox agent sync |
+| Campaigns (CSV, start/pause, dial) | ✅ | Optional `workflow_id` on create/start |
+| **Workflow automation Phase 1** | ✅ | JSON definitions, engine, templates, instances — [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) |
+| **Workflow automation Phase 2** | ✅ | Visual builder, email node, SAP ingest, process-due |
+| **Workflow automation Phase 3** | ✅ | Call-ended advance, Temporal scheduler, config panel, campaign WF UI |
+| **Workflow automation Phase 4** | ✅ | Org scoping, WhatsApp provider, condition rules UI |
+| **Multi-layer memory (Phase 6)** | ✅ | Working/procedural memory, governance, TTL |
+| **Voice intelligence (Phase 8)** | ✅ | Emotion tracker, end-of-call service, cost/time awareness |
+| Theme colour refresh | ✅ | Indigo/violet palette, pink accent, warm charcoal dark bg |
+| React Doctor cleanup | ✅ | 571+ fixes across 34 files, score 76/100 |
+| HITL approvals, live monitoring, analytics | ✅ | Dashboard |
+| Light/dark theme | ✅ | Settings → Appearance |
+| Demo seed | ✅ | `demo@voise.ai` / `DemoVoise2026!` |
+
+Items below are the **full product catalog**; not all rows are implemented yet. See [missing_features.md](./missing_features.md) for enterprise gaps.
 
 ---
 
@@ -132,24 +155,44 @@
 
 ### Workflow Engine
 
-* YAML / JSON workflow definitions
-* Conditional branching
-* Decision trees
-* Event-driven workflows
-* Multi-step workflows
-* Parallel execution steps
-* Timeout handling
-* Retry logic
+| Feature | Status |
+|---------|--------|
+| JSON workflow definitions (v1 schema) | ✅ Shipped |
+| Visual workflow builder (`@xyflow/react`) | ✅ Phase 2 |
+| Conditional branching (`condition` nodes) | ✅ Shipped |
+| Built-in templates (collections, lead qual, appointment) | ✅ Shipped |
+| Workflow instances + test runs | ✅ Shipped |
+| Wait / retry / `process-due` scheduler | ✅ Shipped |
+| Voice call step (campaign dial integration) | ✅ Shipped |
+| Email step (SMTP or simulated + audit) | ✅ Phase 2 |
+| HITL approval step | ✅ Shipped |
+| Escalate / end nodes | ✅ Shipped |
+| SAP AR CSV ingest | ✅ Phase 2 |
+| Campaign ↔ workflow on start | ✅ Phase 2 |
+| YAML definitions | ⏳ JSON only today |
+| Parallel execution steps | ⏳ Planned |
+| Event-driven auto-advance on call end | ⏳ Phase 3 |
 
 ### Business Automation
 
-* CRM lookup & update
-* Ticket creation
-* Payment reminder flows
-* Follow-up SMS / WhatsApp
-* Email triggers
-* API webhooks
-* Database queries
+| Feature | Status |
+|---------|--------|
+| Payment reminder flows (template) | ✅ Shipped |
+| Email triggers | ✅ Shipped |
+| WhatsApp messaging w/ templates | ✅ Phase 4 (simulated + Twilio status callback) |
+| Organization-scoped workflows | ✅ Phase 4 (all `WorkflowService` methods) |
+| Condition rules UI (JSON/visual toggle) | ✅ Phase 4 |
+| Multi-layer memory (working, procedural) | ✅ Phase 6 |
+| Memory governance (TTL, `do_not_remember` flags) | ✅ Phase 6 |
+| Emotion tracking (pace/tone adaptation) | ✅ Phase 8 |
+| End-of-call intelligence (outcome, satisfaction, next-steps) | ✅ Phase 8 |
+| Cost-aware model downgrade | ✅ Phase 8 |
+| Time-aware prompting | ✅ Phase 8 |
+| CRM lookup & update | ⏳ Via tools / custom |
+| Ticket creation | ⏳ Planned |
+| Follow-up SMS | ⏳ Planned |
+| API webhooks (workflow) | ⏳ Partial (Ultravox call-ended) |
+| Database queries | ⏳ Via tools |
 
 ---
 
@@ -248,9 +291,12 @@
 
 ### Workflow Management
 
-* Workflow creation & editing
-* Workflow versioning
-* Enable / disable workflows
+| Feature | Status |
+|---------|--------|
+| Workflow creation & editing (Visual + JSON) | ✅ Shipped |
+| Publish / enable workflows (`active` status) | ✅ Shipped |
+| Workflow versioning (DB `version` field) | ✅ Partial |
+| Per-organization workflow isolation | ⏳ Schema ready, filters TBD |
 
 ---
 

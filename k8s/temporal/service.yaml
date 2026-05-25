@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: voise-temporal
+  namespace: voise
+  labels:
+    app.kubernetes.io/name: voise-temporal
+    app.kubernetes.io/part-of: voise
+spec:
+  selector:
+    app: voise-temporal
+  ports:
+    - port: 7233
+      targetPort: 7233
+      name: grpc
+    - port: 8233
+      targetPort: 8233
+      name: ui

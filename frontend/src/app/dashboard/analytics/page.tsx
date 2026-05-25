@@ -8,8 +8,9 @@ import {
 } from 'recharts';
 import {
     TrendingUp, Clock, Zap, DollarSign,
-    CheckCircle2, PhoneIncoming, BarChart3
+    CheckCircle2, PhoneIncoming, BarChart3, Loader2, Activity
 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function AnalyticsPage() {
     const [overview, setOverview] = useState<any>(null);
@@ -40,24 +41,28 @@ export default function AnalyticsPage() {
     }, []);
 
     const stats = [
-        { label: 'Total Calls', value: overview?.total_calls || 0, icon: PhoneIncoming, color: 'var(--accent-cyan)', glow: 'hover:shadow-[0_0_20px_rgba(0,212,170,0.08)]' },
-        { label: 'Success Rate', value: `${overview?.success_rate || 0}%`, icon: CheckCircle2, color: 'var(--accent-emerald)', glow: 'hover:shadow-[0_0_20px_rgba(16,185,129,0.08)]' },
-        { label: 'Avg response time', value: `${overview?.avg_latency_ms || 0} ms`, icon: Zap, color: 'var(--accent-purple)', glow: 'hover:shadow-[0_0_20px_rgba(139,92,246,0.08)]' },
-        { label: 'Total Minutes', value: overview?.total_minutes || 0, icon: Clock, color: 'var(--accent-blue)', glow: 'hover:shadow-[0_0_20px_rgba(59,130,246,0.08)]' },
-        { label: 'Cost Avoided', value: `$${overview?.total_cost || 0}`, icon: DollarSign, color: 'var(--accent-amber)', glow: 'hover:shadow-[0_0_20px_rgba(245,158,11,0.08)]' },
+        { label: 'Total Calls', value: overview?.total_calls || 0, icon: PhoneIncoming, iconStyle: 'bg-primary/10 text-primary' },
+        { label: 'Success Rate', value: `${overview?.success_rate || 0}%`, icon: CheckCircle2, iconStyle: 'bg-green-500/10 text-green-600' },
+        { label: 'Avg Response Time', value: `${overview?.avg_latency_ms || 0} ms`, icon: Zap, iconStyle: 'bg-secondary/20 text-secondary-foreground' },
+        { label: 'Total Minutes', value: overview?.total_minutes || 0, icon: Clock, iconStyle: 'bg-primary/10 text-primary' },
+        { label: 'Cost Avoided', value: `₹${overview?.total_cost || 0}`, icon: DollarSign, iconStyle: 'bg-secondary/20 text-secondary-foreground' },
     ];
 
     if (isLoading) {
         return (
-            <div className="grid gap-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                     {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="glass-card h-28 animate-pulse" />
+                        <Card key={i} className="h-28 animate-pulse" />
                     ))}
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="glass-card h-80 animate-pulse" />
-                    <div className="glass-card h-80 animate-pulse" />
+                    <Card className="h-80 animate-pulse" />
+                    <Card className="h-80 animate-pulse" />
+                </div>
+                <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                    <Loader2 className="size-5 animate-spin" />
+                    <span className="text-sm">Loading analytics data...</span>
                 </div>
             </div>
         );
@@ -65,122 +70,170 @@ export default function AnalyticsPage() {
 
     return (
         <div className="space-y-6 pb-20">
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                    Observability & <span className="text-gradient-brand">Analytics</span>
-                </h2>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">Call volume, success rates, and agent performance across your organization.</p>
+            {/* Page Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
+                        <Activity className="size-6 text-primary" />
+                        Observability &{' '}
+                        <span className="text-primary">
+                            Analytics
+                        </span>
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Call volume, success rates, and agent performance across your organization.
+                    </p>
+                </div>
             </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
+            {/* Stat Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 {stats.map((s, i) => (
-                    <div key={i} className={`glass-card p-5 group flex flex-col justify-between relative transition-all duration-300 ${s.glow}`}>
-                        <div className="flex items-center justify-between mb-4">
-                            <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">{s.label}</span>
-                            <div className="w-8 h-8 rounded-lg bg-[var(--bg-overlay)] border border-[var(--border-subtle)] flex items-center justify-center">
-                                <s.icon className="w-4 h-4" style={{ color: s.color }} />
+                    <Card key={i} className="hover:shadow-md transition-all">
+                        <CardContent className="pt-1">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    {s.label}
+                                </span>
+                                <div className={`size-9 rounded-lg flex items-center justify-center ${s.iconStyle}`}>
+                                    <s.icon className="size-4" />
+                                </div>
                             </div>
-                        </div>
-                        <p className="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">{s.value}</p>
-                        {/* Subtle accent bottom bar */}
-                        <div className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: `linear-gradient(90deg, transparent, ${s.color}, transparent)` }} />
-                    </div>
+                            <p className="text-2xl font-semibold text-foreground">{s.value}</p>
+                        </CardContent>
+                    </Card>
                 ))}
             </div>
 
+            {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Traffic Trend */}
-                <div className="glass-card p-6">
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-6 flex items-center gap-2">
-                        <TrendingUp className="w-4.5 h-4.5 text-[var(--accent-cyan)]" />
-                        Call Volume Trend
-                    </h3>
-                    <div className="h-[280px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <defs>
-                                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="var(--accent-cyan)" stopOpacity={0.15} />
-                                        <stop offset="95%" stopColor="var(--accent-cyan)" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                                <XAxis dataKey="date" stroke="var(--text-tertiary)" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
-                                <YAxis stroke="var(--text-tertiary)" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid border-[var(--border-default)]', borderRadius: '12px' }}
-                                    itemStyle={{ color: 'var(--text-primary)' }}
-                                />
-                                <Area type="monotone" dataKey="count" stroke="var(--accent-cyan)" fillOpacity={1} fill="url(#colorCount)" strokeWidth={2} />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
+                {/* Call Volume Trend */}
+                <Card className="hover:shadow-md transition-all">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                            <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                                <TrendingUp className="size-4" />
+                            </div>
+                            Call Volume Trend
+                        </CardTitle>
+                        <CardDescription>Daily call volume over the selected period</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-[280px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
 
-                {/* Agent Comparison */}
-                <div className="glass-card p-6">
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-6 flex items-center gap-2">
-                        <BarChart3 className="w-4.5 h-4.5 text-[var(--accent-purple)]" />
-                        Agent Distribution
-                    </h3>
-                    <div className="h-[280px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={performance} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                                <XAxis dataKey="name" stroke="var(--text-tertiary)" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
-                                <YAxis stroke="var(--text-tertiary)" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid border-[var(--border-default)]', borderRadius: '12px' }}
-                                />
-                                <Bar dataKey="calls" fill="var(--accent-purple)" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
+                                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                                    <XAxis dataKey="date" className="text-muted-foreground" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
+                                    <YAxis className="text-muted-foreground" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: 'var(--color-card, #1c1c1e)',
+                                            border: '1px solid var(--color-border, #2a2a2e)',
+                                            borderRadius: '12px',
+                                            color: 'var(--color-foreground, #fff)',
+                                        }}
+                                        itemStyle={{ color: 'var(--color-foreground, #fff)' }}
+                                    />
+                                    <Area type="monotone" dataKey="count" stroke="#6C5CE7" fill="#6C5CE7" fillOpacity={0.15} strokeWidth={2} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Agent Distribution */}
+                <Card className="hover:shadow-md transition-all">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                            <div className="size-7 rounded-lg bg-secondary/20 text-secondary-foreground flex items-center justify-center">
+                                <BarChart3 className="size-4" />
+                            </div>
+                            Agent Distribution
+                        </CardTitle>
+                        <CardDescription>Call distribution across active agents</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-[280px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={performance} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                                    <XAxis dataKey="name" className="text-muted-foreground" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
+                                    <YAxis className="text-muted-foreground" fontSize={10} fontWeight={600} tickLine={false} axisLine={false} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: 'var(--color-card, #1c1c1e)',
+                                            border: '1px solid var(--color-border, #2a2a2e)',
+                                            borderRadius: '12px',
+                                            color: 'var(--color-foreground, #fff)',
+                                        }}
+                                    />
+                                    <Bar dataKey="calls" fill="#6C5CE7" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Performance Metrics Table */}
-            <div className="glass-card overflow-hidden p-0">
-                <div className="px-6 py-4 border-b border-[var(--border-subtle)]">
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Agent Efficiency Metrics</h3>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-[var(--bg-overlay)] text-[10px] uppercase tracking-wider font-bold text-[var(--text-tertiary)]">
-                            <tr>
-                                <th className="px-6 py-4 border-b border-[var(--border-subtle)]">Agent Name</th>
-                                <th className="px-6 py-4 border-b border-[var(--border-subtle)]">Total Calls</th>
-                                <th className="px-6 py-4 border-b border-[var(--border-subtle)]">Avg Duration</th>
-                                <th className="px-6 py-4 border-b border-[var(--border-subtle)]">Avg Latency</th>
-                                <th className="px-6 py-4 border-b border-[var(--border-subtle)]">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/[0.04]">
-                            {performance.map((p, i) => (
-                                <tr key={i} className="hover:bg-[var(--bg-overlay)] transition-colors">
-                                    <td className="px-6 py-4 text-xs font-bold text-[var(--text-primary)]">{p.name}</td>
-                                    <td className="px-6 py-4 text-xs text-[var(--text-secondary)]">{p.calls}</td>
-                                    <td className="px-6 py-4 text-xs text-[var(--text-secondary)]">{p.avg_duration}s</td>
-                                    <td className="px-6 py-4 text-xs font-mono font-semibold text-[var(--accent-purple)]">{p.avg_latency}ms</td>
-                                    <td className="px-6 py-4">
-                                        {p.avg_latency > 350 ? (
-                                            <span className="px-2 py-0.5 rounded-full bg-[var(--accent-amber)]/10 text-[var(--accent-amber)] text-[9px] font-bold uppercase tracking-wider border border-[var(--accent-amber)]/20">Degraded</span>
-                                        ) : (
-                                            <span className="px-2 py-0.5 rounded-full bg-[var(--accent-emerald)]/10 text-[var(--accent-emerald)] text-[9px] font-bold uppercase tracking-wider border border-[var(--accent-emerald)]/20">Healthy</span>
-                                        )}
-                                    </td>
+            <Card className="hover:shadow-md transition-all">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                        <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                            <Zap className="size-4" />
+                        </div>
+                        Agent Efficiency Metrics
+                    </CardTitle>
+                    <CardDescription>Per-agent latency, call volume, and health status</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b border-border bg-muted/50">
+                                    <th className="px-6 py-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Agent Name</th>
+                                    <th className="px-6 py-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Total Calls</th>
+                                    <th className="px-6 py-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Avg Duration</th>
+                                    <th className="px-6 py-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Avg Latency</th>
+                                    <th className="px-6 py-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Status</th>
                                 </tr>
-                            ))}
-                            {performance.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-10 text-center text-[var(--text-tertiary)] text-xs italic">No agent data available yet.</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {performance.map((p, i) => (
+                                    <tr key={i} className="hover:bg-muted/50 transition-colors">
+                                        <td className="px-6 py-4 text-xs font-semibold text-foreground">{p.name}</td>
+                                        <td className="px-6 py-4 text-xs text-muted-foreground">{p.calls}</td>
+                                        <td className="px-6 py-4 text-xs text-muted-foreground">{p.avg_duration}s</td>
+                                        <td className="px-6 py-4 text-xs font-mono font-semibold text-primary">{p.avg_latency}ms</td>
+                                        <td className="px-6 py-4">
+                                            {p.avg_latency > 350 ? (
+                                                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-500/10 text-yellow-600">
+                                                    Degraded
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-500/10 text-green-600">
+                                                    Healthy
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {performance.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-12 text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <BarChart3 className="size-8 text-muted-foreground/50" />
+                                                <p className="text-sm text-muted-foreground">No agent data available yet.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }

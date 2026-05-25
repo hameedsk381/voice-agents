@@ -9,8 +9,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
-
+from datetime import datetime, timedelta, date
+ 
 from app.core import database
 from app.core.security import (
     get_password_hash, 
@@ -38,6 +38,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: Optional[str]
     role: str
+    organization_id: Optional[str] = None
     is_active: bool
     created_at: datetime
     
@@ -102,24 +103,60 @@ async def register(
             detail="Email already registered"
         )
     
-    # Create user
+    # Create user with their own organization
+    from app.models.tenant import Organization
+    from app.models.billing import Subscription, SubscriptionStatus
+    import uuid
+
+    org = Organization(
+        id=str(uuid.uuid4()),
+        name=f"{user_data.email.split('@')[0]}",
+        domain=user_data.email.split('@')[1],
+        subscription_plan="free",
+        is_active=True,
+    )
+    db.add(org)
+    db.flush()
+
     user = User(
         email=user_data.email,
         hashed_password=get_password_hash(user_data.password),
         full_name=user_data.full_name,
-        role=UserRole.VIEWER.value  # Default role
+        role=UserRole.VIEWER.value,
+        organization_id=org.id,
     )
-    
+
     # First user becomes admin
     user_count = db.query(User).count()
     if user_count == 0:
         user.role = UserRole.ADMIN.value
         user.is_superuser = True
-    
+
     db.add(user)
+    db.flush()
+
+    # Create trial subscription (14 days, 50 minutes)
+    today = date.today()
+    period_start = today.replace(day=1)
+    if today.month == 12:
+        period_end = period_start.replace(year=period_start.year + 1, month=1, day=1)
+    else:
+        period_end = period_start.replace(month=period_start.month + 1, day=1)
+
+    sub = Subscription(
+        organization_id=org.id,
+        plan="free",
+        status=SubscriptionStatus.TRIALING.value,
+        billing_period_start=period_start,
+        billing_period_end=period_end,
+        trial_starts_at=datetime.utcnow(),
+        trial_ends_at=datetime.utcnow() + timedelta(days=14),
+        auto_renew="true",
+    )
+    db.add(sub)
     db.commit()
     db.refresh(user)
-    
+
     return user
 
 
@@ -151,7 +188,7 @@ async def login(
     user.last_login = datetime.utcnow()
     db.commit()
     
-    tokens = create_tokens(user.id, user.email, user.role)
+    tokens = create_tokens(user.id, user.email, user.role, user.organization_id)
     
     # Set cookies
     response.set_cookie(
@@ -222,7 +259,7 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
-    tokens = create_tokens(user.id, user.email, user.role)
+    tokens = create_tokens(user.id, user.email, user.role, user.organization_id)
     
     # Revoke the old token by adding its jti to the database blacklist
     if token_data.jti:

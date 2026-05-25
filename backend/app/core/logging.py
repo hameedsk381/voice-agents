@@ -30,4 +30,6 @@ def setup_logging():
         logging.getLogger(name).propagate = True
 
     # configure loguru
-    logger.configure(handlers=[{"sink": sys.stdout, "serialize": False}])
+    import os
+    serialize = os.getenv("LOG_FORMAT", "text").lower() == "json"
+    logger.configure(handlers=[{"sink": sys.stdout, "serialize": serialize}])

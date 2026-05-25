@@ -1,29 +1,34 @@
-from sqlalchemy import Column, String, JSON, DateTime, ForeignKey, Boolean, Float
+from sqlalchemy import Column, String, Text, JSON, DateTime, ForeignKey, Boolean, Float
 from datetime import datetime
 from app.core.database import Base
 import uuid
 
 class AuditLog(Base):
-    """Immutable audit trail for every call turn."""
+    """Immutable audit trail for every call turn — chained with cryptographic signatures."""
     __tablename__ = "audit_logs"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = Column(String, index=True)
-    organization_id = Column(String, index=True, nullable=True) # Multitenancy
-    turn_index = Column(Float) # turn counter
+    organization_id = Column(String, index=True, nullable=True)
+    turn_index = Column(Float)
     
-    # Content snapshot (PII redacted versions are optional)
+    # Content snapshot (PII redacted versions)
     user_message = Column(String)
     ai_response = Column(String)
     
     # Audit Results
     is_compliant = Column(Boolean, default=True)
-    violations = Column(JSON, default=list) # List of violations details
+    violations = Column(JSON, default=list)
     risk_score = Column(Float, default=0.0)
     
     # State Metadata
     agent_id = Column(String, ForeignKey("agents.id"))
-    state_name = Column(String) # Converstion state name
+    state_name = Column(String)
+    
+    # Cryptographic Chain Fields
+    signature = Column(Text, nullable=True)
+    previous_hash = Column(String, nullable=True)
+    chain_head = Column(Boolean, default=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
 

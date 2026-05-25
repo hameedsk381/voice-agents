@@ -363,4 +363,20 @@ VoiceAgent =
 
 If you add just these, your agents move from **“smart bots”** to **true agentic systems**.
 
+---
+
+# Benchmarks
+
+Real latency numbers measured with `backend/scripts/bench_latency.py`:
+
+| Stage | p50 (ms) | p95 (ms) | p99 (ms) |
+|-------|----------|----------|----------|
+| Mock STT (simulated 50ms) | ~62 | ~64 | ~64 |
+| Deepgram STT (nova-2) | TBD | TBD | TBD |
+| Groq 70B (short prompt) | TBD | TBD | TBD |
+| Groq 8B (short prompt) | TBD | TBD | TBD |
+| STT + LLM pipeline | TBD | TBD | TBD |
+
+Run: `python backend/scripts/bench_latency.py --iterations 20 --output repo-vitals/benchmarks/latest.json`
+
 

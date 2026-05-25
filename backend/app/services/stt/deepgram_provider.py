@@ -1,6 +1,7 @@
 from deepgram import DeepgramClient
 
 from app.core.config import settings
+from app.core.languages import deepgram_language
 from app.services.stt.base import STTProvider
 from app.services.stt.types import TranscriptResult
 from loguru import logger
@@ -51,7 +52,7 @@ class DeepgramSTT(STTProvider):
         if language == "auto":
             options["detect_language"] = True
         else:
-            options["language"] = language
+            options["language"] = deepgram_language(language)
 
         response = self.client.listen.prerecorded.v("1").transcribe_file(
             {"buffer": audio_bytes, "mimetype": mimetype},

@@ -15,10 +15,16 @@ from app.services.ultravox_service import UltravoxService
 from app.orchestration.session_manager import session_manager
 from app.services.monitoring_service import monitoring_service
 from app.orchestration.ultravox_call import (
-    build_ultravox_selected_tools,
+    STAGE_CHANGE_TOOL_NAME,
+    build_stage_change_tool_descriptor,
     build_system_prompt,
+    build_tool_result,
+    build_ultravox_selected_tools,
     extract_agent_tool_names,
+    get_agent_stages,
+    resolve_stage_config,
 )
+from app.core.config import settings
 from app.orchestration.audio_handler import pcm16le_to_wav_bytes
 from app.orchestration.tool_executor import execute_tool
 from app.services.compliance_service import compliance_validator, redactor, get_baseline_rules
@@ -269,8 +275,10 @@ async def run_ultravox_proxy_session(
                     continue
 
                 if event_type == "state":
+                    state_data = event.get("state")
+                    await session_manager.update_session(session_id, {"ultravox_state": state_data})
                     await monitoring_service.broadcast_event(session_id, "ultravox_state", {
-                        "state": event.get("state")
+                        "state": state_data
                     })
                     continue
 
@@ -320,30 +328,101 @@ async def run_ultravox_proxy_session(
                         }))
                         continue
 
+                    if tool_name == STAGE_CHANGE_TOOL_NAME:
+                        stage_name = (tool_arguments or {}).get("stage_name", "")
+                        stages = get_agent_stages(agent)
+                        stage = next((s for s in stages if s.name == stage_name), None)
+                        if not stage:
+                            await uvx_ws.send(json.dumps({
+                                "type": result_message_type,
+                                "invocationId": invocation_id,
+                                "responseType": "tool-response",
+                                "errorType": "implementation-error",
+                                "errorMessage": f"Unknown stage: {stage_name}",
+                            }))
+                            continue
+
+                        stage_config = resolve_stage_config(
+                            agent, stage_name,
+                            current_system_prompt=system_prompt,
+                            current_voice=selected_voice,
+                            current_temperature=settings.ULTRAVOX_DEFAULT_TEMPERATURE,
+                            current_language=session_language,
+                        )
+                        wrapped = build_tool_result(
+                            stage_config,
+                            response_type="new-stage",
+                        )
+                        result_payload: Dict[str, Any] = {
+                            "type": result_message_type,
+                            "invocationId": invocation_id,
+                            "result": wrapped,
+                            "responseType": "new-stage",
+                        }
+                        await uvx_ws.send(json.dumps(result_payload))
+                        await monitoring_service.broadcast_event(session_id, "stage_change", {
+                            "from_stage": None,
+                            "to_stage": stage_name,
+                        })
+                        await websocket.send_json({
+                            "type": "stage_change",
+                            "stage": stage_name,
+                        })
+                        continue
+
                     try:
-                        result = await execute_tool(
+                        result_dict = await execute_tool(
                             tool_name,
                             tool_arguments,
                             db,
                             agent_id,
                             session_id,
                         )
-                        await uvx_ws.send(json.dumps({
+
+                        result_text = result_dict.get("result", "")
+                        confidence = result_dict.get("confidence", 1.0)
+                        metadata = result_dict.get("metadata", {})
+                        is_error = result_dict.get("error", False)
+
+                        # Build result payload for Ultravox
+                        result_payload: Dict[str, Any] = {
                             "type": result_message_type,
                             "invocationId": invocation_id,
-                            "result": result,
+                            "result": result_text,
                             "responseType": "tool-response",
-                        }))
+                        }
+
+                        # Wire confidence and metadata into call state so Ultravox
+                        # can make informed decisions about next actions
+                        call_state = {
+                            "_tool_confidence": confidence,
+                            "_tool_metadata": metadata,
+                        }
+                        result_payload["updateCallState"] = call_state
+                        await session_manager.update_session(
+                            session_id, {"ultravox_state": call_state}
+                        )
+
+                        if is_error:
+                            result_payload["errorType"] = "implementation-error"
+                            result_payload["errorMessage"] = result_text
+
+                        await uvx_ws.send(json.dumps(result_payload))
                         await monitoring_service.broadcast_event(session_id, "tool_result", {
                             "name": tool_name,
                             "arguments": tool_arguments,
-                            "result": result,
+                            "result": result_text,
+                            "confidence": confidence,
+                            "metadata": metadata,
                             "provider": "ultravox",
+                            "error": is_error,
                         })
                         await websocket.send_json({
                             "type": "tool_result",
                             "name": tool_name,
-                            "result": result,
+                            "result": result_text,
+                            "confidence": confidence,
+                            "metadata": metadata,
                         })
                     except Exception as tool_error:
                         logger.error(f"Ultravox tool execution failed ({tool_name}): {tool_error}")

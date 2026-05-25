@@ -18,11 +18,13 @@ def _use_ultravox_voice_stack() -> bool:
     return settings.USE_ULTRAVOX_RUNTIME and ultravox_service.enabled
 
 @router.get("/", response_model=List[Dict[str, Any]])
-async def list_voices():
-    """List all available voices (Standard + Cloned)."""
+async def list_voices(primaryLanguage: Optional[str] = None):
+    """List all available voices (Standard + Cloned).
+    Optionally filter by BCP47 primaryLanguage code.
+    """
     if _use_ultravox_voice_stack():
         try:
-            return await ultravox_service.list_voices()
+            return await ultravox_service.list_voices(primaryLanguage=primaryLanguage)
         except Exception as e:
             logger.error(f"Ultravox list voices failed: {e}")
             raise HTTPException(status_code=502, detail="Failed to fetch voices from Ultravox")

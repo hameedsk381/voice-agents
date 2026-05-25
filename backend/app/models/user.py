@@ -1,7 +1,8 @@
 """
 User model for authentication.
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
 import uuid
@@ -28,6 +29,10 @@ class User(Base):
     
     # Role-based access control
     role = Column(String, default=UserRole.VIEWER.value)
+    
+    # Multi-tenant
+    organization_id = Column(String, ForeignKey("organizations.id"), index=True, nullable=True)
+    organization = relationship("Organization", back_populates="users")
     
     # Status
     is_active = Column(Boolean, default=True)

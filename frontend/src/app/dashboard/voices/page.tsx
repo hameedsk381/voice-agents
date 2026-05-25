@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { languageDisplay } from "@/lib/languages";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Play, Mic, Plus, Trash2, Wand2, Loader2, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Voice {
     id: string;
     name: string;
     type: string;
+    primaryLanguage?: string;
 }
 
 export default function VoiceLabPage() {
@@ -35,42 +40,40 @@ export default function VoiceLabPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 select-none">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                        Voice <span className="text-gradient-brand">Lab</span>
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                        Voice <span className="text-primary">Lab</span>
                     </h2>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">Design unique text-to-speech presets or clone custom reference samples.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Design unique text-to-speech presets or clone custom reference samples.</p>
                 </div>
-                <div className="flex gap-2.5">
+                <div className="flex items-center gap-2">
                     {activeTab !== "gallery" && (
-                        <button
+                        <Button
+                            type="button"
+                            variant="ghost"
                             onClick={() => setActiveTab("gallery")}
-                            className="px-4 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-overlay)] border border-[var(--border-default)] hover:bg-[var(--glass-bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all duration-300"
+                            className="rounded-xl text-xs font-semibold"
                         >
                             Back to Gallery
-                        </button>
+                        </Button>
                     )}
-                    <button
+                    <Button
+                        type="button"
                         onClick={() => setActiveTab("design")}
-                        className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-300 ${
-                            activeTab === 'design' 
-                                ? 'bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white shadow-lg' 
-                                : 'bg-[var(--bg-overlay)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]'
-                        }`}
+                        variant={activeTab === 'design' ? 'default' : 'secondary'}
+                        className="flex items-center gap-2 text-xs font-semibold rounded-xl"
                     >
-                        <Wand2 className="w-3.5 h-3.5" />
+                        <Wand2 className="size-3.5" />
                         Design Voice
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        type="button"
                         onClick={() => setActiveTab("clone")}
-                        className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-300 ${
-                            activeTab === 'clone' 
-                                ? 'bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white shadow-lg' 
-                                : 'bg-[var(--bg-overlay)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]'
-                        }`}
+                        variant={activeTab === 'clone' ? 'default' : 'secondary'}
+                        className="flex items-center gap-2 text-xs font-semibold rounded-xl"
                     >
-                        <Mic className="w-3.5 h-3.5" />
+                        <Mic className="size-3.5" />
                         Clone Voice
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -90,6 +93,8 @@ export default function VoiceLabPage() {
     );
 }
 
+
+
 function VoiceGallery({ voices, loading, onDelete }: { voices: Voice[], loading: boolean, onDelete: () => void }) {
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to delete this voice preset?")) return;
@@ -106,47 +111,73 @@ function VoiceGallery({ voices, loading, onDelete }: { voices: Voice[], loading:
         return (
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
                 {[1, 2, 3].map((i) => (
-                    <div key={i} className="glass-card h-32 animate-pulse" />
+                    <Card key={i} className="h-32 animate-pulse bg-muted/50" />
                 ))}
             </div>
         );
     }
 
+    const grouped = voices.reduce<Record<string, Voice[]>>((acc, v) => {
+        const lang = v.primaryLanguage || "unknown";
+        if (!acc[lang]) acc[lang] = [];
+        acc[lang].push(v);
+        return acc;
+    }, {});
+
+    const sortedLangs = Object.keys(grouped).sort();
+
+    if (voices.length === 0) {
+        return (
+            <Card className="col-span-full border-dashed">
+                <CardContent className="py-16 text-center text-muted-foreground">
+                    <Mic className="size-10 mx-auto mb-4 text-primary" />
+                    <p className="text-sm font-semibold text-foreground">No voice profiles registered</p>
+                    <p className="text-xs text-muted-foreground mt-1">Design or clone a brand voice for your agents.</p>
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {voices.map((voice) => (
-                <div key={voice.id} className="glass-card p-5 group flex flex-col justify-between hover:border-[var(--border-active)] transition-all relative">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-bold text-[var(--text-primary)]">{voice.name}</h3>
-                        {voice.type === 'cloned' && (
-                            <button 
-                                onClick={() => handleDelete(voice.id)} 
-                                className="text-[var(--text-tertiary)] hover:text-[var(--accent-rose)] opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
-                            voice.type === 'standard' 
-                                ? 'bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border-[var(--accent-blue)]/20' 
-                                : 'bg-[var(--accent-purple)]/10 text-[var(--accent-purple)] border-[var(--accent-purple)]/20'
-                        }`}>
-                            {voice.type === 'standard' ? 'Standard' : 'Cloned'}
-                        </span>
-                        <span className="text-[10px] text-[var(--text-tertiary)] font-mono">ID: {voice.id.slice(0, 8)}...</span>
+        <div className="space-y-8">
+            {sortedLangs.map((lang) => (
+                <div key={lang} className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {languageDisplay(lang)}
+                        <span className="ml-2 font-normal text-muted-foreground/60">({grouped[lang].length})</span>
+                    </h3>
+                    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                        {grouped[lang].map((voice) => (
+                            <Card key={voice.id} className="hover:shadow-md transition-all hover:border-primary/50 flex flex-col justify-between p-5 relative group min-h-[120px]">
+                                <div className="flex items-start justify-between mb-4">
+                                    <h3 className="text-sm font-semibold text-foreground truncate max-w-[150px]">{voice.name}</h3>
+                                    {voice.type === 'cloned' && (
+                                        <Button 
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleDelete(voice.id)} 
+                                            className="text-muted-foreground hover:text-destructive h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <Trash2 className="size-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                                <div className="flex items-center justify-between mt-auto">
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-semibold uppercase border ${
+                                        voice.type === 'standard' 
+                                            ? 'bg-primary/10 text-primary border-primary/20' 
+                                            : 'bg-accent/10 text-accent-foreground border-accent/20 dark:text-accent'
+                                    }`}>
+                                        {voice.type === 'standard' ? 'Standard' : 'Cloned'}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground font-mono">ID: {voice.id.slice(0, 8)}...</span>
+                                </div>
+                            </Card>
+                        ))}
                     </div>
                 </div>
             ))}
-
-            {voices.length === 0 && (
-                <div className="col-span-full py-16 text-center text-[var(--text-secondary)] border border-dashed border-[var(--border-default)] rounded-2xl bg-[var(--bg-overlay)]">
-                    <Mic className="w-8 h-8 mx-auto mb-3 text-[var(--text-tertiary)]" />
-                    <p className="text-sm font-semibold">No voice profiles registered</p>
-                    <p className="text-xs text-[var(--text-tertiary)] mt-1">Design or clone a brand voice for your agents.</p>
-                </div>
-            )}
         </div>
     );
 }
@@ -178,56 +209,62 @@ function VoiceDesigner({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <div className="glass-card p-6 md:p-8 max-w-2xl relative overflow-hidden">
-            <div className="pb-5 border-b border-[var(--border-subtle)] mb-6">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Voice Prompt Design</h3>
-                <p className="text-[10px] text-[var(--text-secondary)] mt-1">Describe tone, pace, and style to preview how your agent will sound.</p>
-            </div>
+        <Card className="max-w-2xl">
+            <CardHeader>
+                <CardTitle className="text-base font-semibold">Voice Prompt Design</CardTitle>
+                <CardDescription className="text-xs">
+                    Describe tone, pace, and style to preview how your agent will sound.
+                </CardDescription>
+            </CardHeader>
 
-            <form onSubmit={handleDesign} className="space-y-5">
-                <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Voice Prompt Description</label>
-                    <textarea
-                        required
-                        value={instruct}
-                        onChange={e => setInstruct(e.target.value)}
-                        placeholder="e.g., A deep, raspy elderly male voice with a slow pace and wisdom."
-                        rows={3}
-                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all resize-none"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Sample Synthesis Text</label>
-                    <input
-                        value={text}
-                        onChange={e => setText(e.target.value)}
-                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all"
-                    />
-                </div>
+            <form onSubmit={handleDesign}>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="voice-prompt-description" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Voice Prompt Description</Label>
+                        <textarea
+                            id="voice-prompt-description"
+                            required
+                            value={instruct}
+                            onChange={e => setInstruct(e.target.value)}
+                            placeholder="e.g., A deep, raspy elderly male voice with a slow pace and wisdom."
+                            rows={3}
+                            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="sample-synthesis-text" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sample Synthesis Text</Label>
+                        <Input
+                            id="sample-synthesis-text"
+                            value={text}
+                            onChange={e => setText(e.target.value)}
+                            className="rounded-xl"
+                        />
+                    </div>
+                </CardContent>
 
-                <div className="flex items-center gap-4 pt-4 border-t border-[var(--border-subtle)]">
-                    <button
+                <CardContent className="flex items-center gap-3 pt-4 border-t border-border/50">
+                    <Button
                         type="submit"
                         disabled={generating}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 hover:-translate-y-0.5 active:scale-98"
+                        className="flex items-center gap-2 rounded-xl text-xs font-semibold"
                     >
-                        {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                        {generating ? "Generating..." : "Generate Preview"}
-                    </button>
-                    <button type="button" onClick={onBack} className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
-                </div>
+                        {generating ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+                        {generating ? "Generating…" : "Generate Preview"}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={onBack} className="text-xs font-semibold rounded-xl">Cancel</Button>
+                </CardContent>
             </form>
 
             {audio && (
-                <div className="mt-8 p-5 bg-[var(--bg-overlay)] rounded-xl border border-[var(--border-subtle)] animate-fade">
-                    <h4 className="text-xs font-bold text-[var(--text-primary)] mb-3">Generated Auditory Sample</h4>
+                <CardContent className="mt-4 p-5 bg-muted/40 rounded-xl border border-border/50 animate-fade space-y-3">
+                    <h4 className="text-xs font-semibold text-foreground">Generated Auditory Sample</h4>
                     <audio controls src={`data:audio/wav;base64,${audio}`} className="w-full" />
-                    <p className="text-[10px] text-[var(--text-tertiary)] italic mt-3 leading-relaxed">
+                    <p className="text-[10px] text-muted-foreground italic leading-relaxed">
                         Verify this generated preset clip before mapping it to target voice agent templates.
                     </p>
-                </div>
+                </CardContent>
             )}
-        </div>
+        </Card>
     );
 }
 
@@ -261,65 +298,72 @@ function VoiceCloner({ onBack }: { onBack: () => void }) {
     };
 
     return (
-        <div className="glass-card p-6 md:p-8 max-w-2xl relative overflow-hidden">
-            <div className="pb-5 border-b border-[var(--border-subtle)] mb-6">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Voice Reference Cloner</h3>
-                <p className="text-[10px] text-[var(--text-secondary)] mt-1">Upload a clean audio sample (10-30s) to create an immediate voice clone profile.</p>
-            </div>
+        <Card className="max-w-2xl">
+            <CardHeader>
+                <CardTitle className="text-base font-semibold">Voice Reference Cloner</CardTitle>
+                <CardDescription className="text-xs">
+                    Upload a clean audio sample (10-30s) to create an immediate voice clone profile.
+                </CardDescription>
+            </CardHeader>
 
-            <form onSubmit={handleClone} className="space-y-5">
-                <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Voice Profile Name</label>
-                    <input
-                        required
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        placeholder="e.g. Founder Corporate Preset"
-                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Reference Audio Transcript</label>
-                    <textarea
-                        required
-                        value={refText}
-                        onChange={e => setRefText(e.target.value)}
-                        placeholder="Accurately input what was said in the audio reference sample clip..."
-                        rows={3}
-                        className="w-full bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all resize-none"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Upload Reference File (WAV/MP3)</label>
-                    <div className="border-2 border-dashed border-[var(--border-default)] bg-[var(--bg-overlay)] rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-[var(--accent-cyan)]/50 transition-colors select-none">
-                        <Upload className="w-7 h-7 text-[var(--text-tertiary)] mb-2" />
-                        <input
-                            type="file"
-                            accept="audio/*"
-                            onChange={e => setFile(e.target.files?.[0] || null)}
-                            className="block w-full text-xs text-[var(--text-secondary)] cursor-pointer
-                              file:mr-4 file:py-1.5 file:px-4
-                              file:rounded-full file:border-0
-                              file:text-xs file:font-semibold
-                              file:bg-[var(--glass-bg)] file:text-[var(--text-primary)]
-                              file:border file:border-[var(--border-default)]
-                              hover:file:bg-white/[0.08]"
+            <form onSubmit={handleClone}>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="voice-profile-name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Voice Profile Name</Label>
+                        <Input
+                            id="voice-profile-name"
+                            required
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder="e.g. Founder Corporate Preset"
+                            className="rounded-xl"
                         />
                     </div>
-                </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="reference-audio-transcript" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reference Audio Transcript</Label>
+                        <textarea
+                            id="reference-audio-transcript"
+                            required
+                            value={refText}
+                            onChange={e => setRefText(e.target.value)}
+                            placeholder="Accurately input what was said in the audio reference sample clip…"
+                            rows={3}
+                            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="voice-reference-file" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upload Reference File (WAV/MP3)</Label>
+                        <div className="border-2 border-dashed border-border bg-muted/40 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-primary/50 transition-colors select-none">
+                            <Upload className="size-7 text-muted-foreground mb-2 text-primary" />
+                            <input
+                                id="voice-reference-file"
+                                type="file"
+                                accept="audio/*"
+                                onChange={e => setFile(e.target.files?.[0] || null)}
+                                className="block w-full text-xs text-muted-foreground cursor-pointer
+                                  file:mr-4 file:py-1.5 file:px-4
+                                  file:rounded-full file:border-0
+                                  file:text-xs file:font-semibold
+                                  file:bg-muted file:text-foreground
+                                  file:border file:border-border
+                                  hover:file:bg-white/[0.08]"
+                            />
+                        </div>
+                    </div>
+                </CardContent>
 
-                <div className="flex items-center gap-4 pt-6 border-t border-[var(--border-subtle)]">
-                    <button
+                <CardContent className="flex items-center gap-3 pt-6 border-t border-border/50">
+                    <Button
                         type="submit"
                         disabled={cloning || !file}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 hover:-translate-y-0.5 active:scale-98"
+                        className="flex items-center gap-2 rounded-xl text-xs font-semibold"
                     >
-                        {cloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                        {cloning ? "Cloning..." : "Clone Voice"}
-                    </button>
-                    <button type="button" onClick={onBack} className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
-                </div>
+                        {cloning ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
+                        {cloning ? "Cloning…" : "Clone Voice"}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={onBack} className="text-xs font-semibold rounded-xl">Cancel</Button>
+                </CardContent>
             </form>
-        </div>
+        </Card>
     );
 }

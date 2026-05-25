@@ -1,7 +1,8 @@
-
-# 📄 Product Requirements Document (PRD)
+# Product Requirements Document (PRD)
 
 ## Product Name: **Voise AI**
+
+> **Doc index:** [DOCS.md](./DOCS.md) · **Workflow implementation:** [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) (Phase 1 & 2 ✅)
 
 ## Version
 
@@ -178,14 +179,24 @@ Frameworks (pluggable):
 
 ### 6.4 Workflow Engine
 
-* Visual workflow builder (Phase 2)
-* YAML / JSON workflows (Phase 1)
+| Capability | Status |
+|------------|--------|
+| JSON workflow definitions (v1) | ✅ **Done (Phase 1)** |
+| In-process executor + instances | ✅ **Done (Phase 1)** |
+| Built-in templates (collections, sales, healthcare) | ✅ **Done (Phase 1)** |
+| Visual workflow builder | ✅ **Done (Phase 2)** |
+| Email steps (SMTP / simulated) | ✅ **Done (Phase 2)** |
+| SAP AR CSV ingest | ✅ **Done (Phase 2)** |
+| Campaign ↔ workflow automation | ✅ **Done (Phase 2)** |
+| Call-ended auto-advance | ⏳ Phase 3 |
 
-Example:
+Example (collections template):
 
 ```
-Call → Intent Detect → CRM Lookup → Response → Follow-up SMS
+VIP check → Voice call → Retry/wait → Email → Aging check → HITL → Escalate → End
 ```
+
+**Reference:** [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md)
 
 ---
 
@@ -254,12 +265,16 @@ Requirements:
 
 ### Key Screens
 
-1. Agent Management
-2. Call Logs & Transcripts
-3. Live Call Monitoring
-4. Workflow Editor
-5. Metrics Dashboard
-6. Configuration Panel
+| Screen | Route | Status |
+|--------|-------|--------|
+| Agent Management | `/dashboard/agents` | ✅ |
+| Workflow Editor (Visual, JSON, SAP, Test) | `/dashboard/workflows/[id]` | ✅ Ph1+2 |
+| Campaigns | `/dashboard/campaigns` | ✅ + workflow picker |
+| Call Logs & Transcripts | `/dashboard/logs` | ✅ |
+| Live Call Monitoring | `/dashboard/monitoring` | ✅ |
+| HITL Approvals | `/dashboard/approvals` | ✅ |
+| Metrics Dashboard | `/dashboard/analytics` | ✅ |
+| Configuration & theme | `/dashboard/settings` | ✅ |
 
 ### Tech
 
@@ -271,24 +286,45 @@ Requirements:
 
 ## 10. 🚀 MVP Scope (Must-Have)
 
-✅ Inbound + Outbound calling
-✅ Single agent per call
-✅ STT + LLM + TTS pipeline
-✅ Orchestration with Temporal
-✅ Admin dashboard (basic)
-✅ Observability
-✅ English + Hindi
+| Requirement | Status |
+|-------------|--------|
+| Inbound + Outbound calling (Twilio + Ultravox) | ✅ |
+| Agent per call + playground | ✅ |
+| Voice pipeline (Ultravox default; custom fallback) | ✅ |
+| Temporal call workflows | ✅ Infrastructure |
+| Admin dashboard | ✅ |
+| Workflow editor (JSON + visual) + templates | ✅ Ph1+2 |
+| Campaigns + optional workflow automation | ✅ |
+| Observability (monitoring, logs, analytics) | ✅ |
+| HITL approvals | ✅ |
+| English + Hindi (agent language config) | ✅ Partial |
 
 ---
 
-## 11. 🔮 Post-MVP (Phase 2)
+## 11. 🔮 Roadmap (updated May 2026)
 
-* Agent swarms
-* Visual workflow builder
-* Human-in-the-loop
-* Voice cloning
+### Shipped (formerly “Post-MVP”)
+
+* ✅ Visual workflow builder (in-app automation Phase 2)
+* ✅ JSON workflow engine + templates (Phase 1)
+* ✅ Human-in-the-loop (approvals dashboard + workflow `hitl_approval` node)
+* ✅ Agent marketplace (template install)
+* ✅ Ultravox voice runtime + agent sync
+
+### Workflow Phase 3 (next)
+
+* Call-ended webhook → auto-advance workflow instances
+* Temporal worker registration for `process_due_workflow_instances`
+* Visual node config panel (no JSON editing)
+* Campaign detail: per-contact workflow instance status
+* WhatsApp / SMS omnichannel nodes
+
+### Broader platform
+
+* Agent swarms (partial — LangGraph/swarm in orchestrator)
+* Voice cloning (Voice Lab — Qwen path)
 * On-device edge agents
-* Marketplace for agents
+* Deeper CRM connectors
 
 ---
 

@@ -3,8 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { ArrowLeft, Save, Settings, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Settings, Trash2, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function NewCampaignPage() {
     const router = useRouter();
@@ -15,6 +19,8 @@ export default function NewCampaignPage() {
     const [agents, setAgents] = useState<any[]>([]);
     const [concurrency, setConcurrency] = useState(1);
     const [greeting, setGreeting] = useState('');
+    const [workflowId, setWorkflowId] = useState('');
+    const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -30,6 +36,7 @@ export default function NewCampaignPage() {
             }
         };
         fetchAgents();
+        api.get('/workflows/active').then(setWorkflows).catch(() => {});
     }, []);
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -44,6 +51,7 @@ export default function NewCampaignPage() {
                 agent_id: agentId,
                 concurrency_limit: concurrency,
                 greeting: greeting.trim() || undefined,
+                workflow_id: workflowId || undefined,
             });
             router.push(`/dashboard/campaigns/${data.id}?new=true`);
         } catch (err: any) {
@@ -54,128 +62,164 @@ export default function NewCampaignPage() {
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6 pb-12">
             <div className="flex items-center gap-4">
-                <Link href="/dashboard/campaigns" className="p-2 rounded-lg bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] text-gray-400 transition-colors">
-                    <ArrowLeft className="w-5 h-5" />
+                <Link href="/dashboard/campaigns" className="p-2 rounded-lg bg-muted hover:bg-muted/70 text-muted-foreground transition-colors">
+                    <ArrowLeft className="size-5" />
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold text-[var(--text-primary)]">Create New Campaign</h1>
-                    <p className="text-gray-400">Configure your automated outbound dialing strategy.</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Create New Campaign</h1>
+                    <p className="text-xs text-muted-foreground mt-1">Configure your automated outbound dialing strategy.</p>
                 </div>
             </div>
 
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Main Config */}
                 <div className="md:col-span-2 space-y-6">
-                    <div className="bg-[var(--bg-raised)] border border-[var(--border-default)] rounded-2xl p-6 space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-400">Campaign Name</label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="E.g. Q1 Product Feedback"
-                                className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
-                                required
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-400">Description (Optional)</label>
-                            <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Describe the purpose of this campaign..."
-                                className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors h-32"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="bg-[var(--bg-raised)] border border-[var(--border-default)] rounded-2xl p-6 space-y-6">
-                        <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                            <Settings className="w-5 h-5 text-blue-500" />
-                            Dialing Strategy
-                        </h3>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-400">Opening Greeting (optional)</label>
-                            <input
-                                type="text"
-                                value={greeting}
-                                onChange={(e) => setGreeting(e.target.value)}
-                                placeholder="Hi, this is your team calling about your appointment…"
-                                className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors text-sm"
-                            />
-                            <p className="text-[10px] text-gray-500">Overrides the agent’s default greeting for everyone in this campaign.</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <Card className="hover:shadow-md transition-all">
+                        <CardHeader>
+                            <CardTitle className="text-base">Campaign Details</CardTitle>
+                            <CardDescription className="text-xs">Provide a primary name and metadata for tracking this campaign.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-400">Assign AI Agent</label>
-                                <select
-                                    value={agentId}
-                                    onChange={(e) => setAgentId(e.target.value)}
-                                    className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                                <Label htmlFor="campaign-name" className="text-xs font-semibold text-muted-foreground">Campaign Name</Label>
+                                <Input
+                                    id="campaign-name"
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="E.g. Q1 Product Feedback"
+                                    className="text-xs bg-muted/30"
                                     required
-                                >
-                                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
+                                />
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-400">Concurrency Limit</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="50"
-                                    value={concurrency}
-                                    onChange={(e) => setConcurrency(parseInt(e.target.value))}
-                                    className="w-full bg-[var(--glass-bg)] border border-[var(--border-default)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                                <Label htmlFor="campaign-description" className="text-xs font-semibold text-muted-foreground">Description (Optional)</Label>
+                                <textarea
+                                    id="campaign-description"
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="Describe the purpose of this campaign..."
+                                    className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all h-28"
                                 />
-                                <p className="text-[10px] text-gray-500">Max parallel calls allowed.</p>
                             </div>
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="hover:shadow-md transition-all">
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <Settings className="size-4 text-primary" />
+                                Dialing Strategy & Logic
+                            </CardTitle>
+                            <CardDescription className="text-xs">Configure the underlying voice agent greeting and parallel line handling.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-5">
+                            <div className="space-y-2">
+                                <Label htmlFor="campaign-greeting" className="text-xs font-semibold text-muted-foreground">Opening Greeting (Optional)</Label>
+                                <Input
+                                    id="campaign-greeting"
+                                    type="text"
+                                    value={greeting}
+                                    onChange={(e) => setGreeting(e.target.value)}
+                                    placeholder="Hi, this is your team calling about your appointment…"
+                                    className="text-xs bg-muted/30"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Overrides the agent’s default greeting for everyone in this campaign.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold text-muted-foreground">Assign AI Agent</Label>
+                                    <select
+                                        value={agentId}
+                                        onChange={(e) => setAgentId(e.target.value)}
+                                        className="w-full bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                                        required
+                                    >
+                                        {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold text-muted-foreground">Concurrency Limit</Label>
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        max="50"
+                                        value={concurrency}
+                                        onChange={(e) => setConcurrency(parseInt(e.target.value) || 1)}
+                                        className="text-xs bg-muted/30 font-mono"
+                                    />
+                                </div>
+
+                                <div className="space-y-2 sm:col-span-2">
+                                    <Label className="text-xs font-semibold text-muted-foreground">Workflow Automation (Optional)</Label>
+                                    <select
+                                        value={workflowId}
+                                        onChange={(e) => setWorkflowId(e.target.value)}
+                                        className="w-full bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        <option value="">None — calls only</option>
+                                        {workflows.map((w) => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        Published workflows run per contact when you start the campaign (call → retry → email → escalate).
+                                    </p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 {/* Sidebar Info */}
                 <div className="space-y-6">
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-6">
-                        <h3 className="text-blue-400 font-semibold mb-2">How it works</h3>
-                        <ul className="text-sm text-gray-400 space-y-3">
-                            <li className="flex gap-2">
-                                <span className="text-blue-500 font-bold">1.</span>
-                                Setup campaign config and assign an agent.
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="text-blue-500 font-bold">2.</span>
-                                Upload your contact list (CSV).
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="text-blue-500 font-bold">3.</span>
-                                Start the campaign and watch live results.
-                            </li>
-                        </ul>
-                    </div>
+                    <Card className="bg-primary/5 border border-primary/10 hover:shadow-sm transition-all">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                                <HelpCircle className="size-4 text-primary" />
+                                Execution Flow
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <ul className="text-xs text-muted-foreground space-y-3.5 list-none pl-0">
+                                <li className="flex gap-2">
+                                    <span className="text-primary font-bold">1.</span>
+                                    Setup campaign config and assign a voice agent.
+                                </li>
+                                <li className="flex gap-2">
+                                    <span className="text-primary font-bold">2.</span>
+                                    Upload your contact list (.csv).
+                                </li>
+                                <li className="flex gap-2">
+                                    <span className="text-primary font-bold">3.</span>
+                                    Start the campaign and watch live results & transcripts.
+                                </li>
+                            </ul>
+                        </CardContent>
+                    </Card>
 
-                    <button
+                    <Button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                        className="w-full h-12 text-sm font-semibold rounded-2xl gap-2 shadow-lg shadow-primary/15"
                     >
                         {isLoading ? 'Creating...' : (
                             <>
-                                <Save className="w-5 h-5" />
+                                <Save className="size-4" />
                                 Create Campaign
                             </>
                         )}
-                    </button>
+                    </Button>
 
                     {error && (
-                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
-                            <Trash2 className="w-4 h-4" />
-                            {error}
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs flex items-center gap-2 animate-in fade-in duration-200">
+                            <Trash2 className="size-4 shrink-0 text-red-500" />
+                            <span>{error}</span>
                         </div>
                     )}
                 </div>

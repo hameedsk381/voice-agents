@@ -33,6 +33,7 @@ class MemoryItem(Base):
     # Governance
     expires_at = Column(DateTime, nullable=True) # TTL for memory
     is_sensitive = Column(Boolean, default=False) # Whether memory contains sensitive data
+    do_not_remember = Column(Boolean, default=False) # User-flagged: do not store this
     
     # Vector embedding for semantic search
     embedding = Column(Vector(384))  # Using sentence-transformers all-MiniLM-L6-v2
@@ -47,6 +48,41 @@ class MemoryItem(Base):
     __table_args__ = (
         Index('idx_memory_user_category', 'user_id', 'category'),
         Index('idx_memory_user_key', 'user_id', 'key'),
+    )
+
+
+class WorkingMemory(Base):
+    """Ephemeral working memory for active tasks within a session."""
+    __tablename__ = "working_memory"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(String, index=True, nullable=False)
+    session_id = Column(String, index=True, nullable=False)
+    key = Column(String, index=True)
+    value = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index('idx_working_session_key', 'session_id', 'key', unique=True),
+    )
+
+
+class ProceduralMemory(Base):
+    """Persistent procedural knowledge — how to perform tasks."""
+    __tablename__ = "procedural_memory"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(String, index=True, nullable=False)
+    name = Column(String, index=True)
+    description = Column(Text, nullable=True)
+    steps = Column(JSON)
+    tags = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_procedure_agent_name', 'agent_id', 'name', unique=True),
     )
 
 
@@ -87,7 +123,7 @@ class UserProfile(Base):
     
     # Basic info (populated over time)
     name = Column(String, nullable=True)
-    preferred_language = Column(String, default="en-US")
+    preferred_language = Column(String, default="en-IN")
     timezone = Column(String, nullable=True)
     
     # Interaction stats

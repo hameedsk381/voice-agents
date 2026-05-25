@@ -2,9 +2,10 @@
 Multi-agent orchestration system.
 Supports supervisor-worker patterns and dynamic agent routing.
 """
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from datetime import datetime
 from loguru import logger
 from app.models.agent import Agent
 from sqlalchemy.orm import Session
@@ -44,7 +45,28 @@ class ConfidenceScores:
     intent: float = 1.0
     policy: float = 1.0
     llm_response: float = 1.0
+    tool_result: float = 1.0
     overall: float = 1.0
+
+    # Configurable thresholds
+    threshold_low: float = 0.4
+    threshold_medium: float = 0.7
+
+    def get_tier(self) -> str:
+        if self.overall < self.threshold_low:
+            return "low"
+        if self.overall < self.threshold_medium:
+            return "medium"
+        return "high"
+
+    def update_overall(self):
+        self.overall = (
+            self.stt * 0.30 +
+            self.intent * 0.25 +
+            self.policy * 0.10 +
+            self.llm_response * 0.15 +
+            self.tool_result * 0.20
+        )
 
 
 @dataclass
@@ -57,10 +79,27 @@ class AgentContext:
     extracted_info: Dict[str, Any]
     current_state: str = "initial"
     
-    # New Elite Features
+    # Phase 6: Memory
     confidence: ConfidenceScores = field(default_factory=ConfidenceScores)
     memory: List[MemoryItem] = None
-    sentiment_slope: float = 1.0 # 0.0 (angry) to 1.0 (happy)
+    sentiment_slope: float = 1.0
+    
+    # Phase 8: Time Awareness
+    call_started_at: Optional[datetime] = None
+    call_duration_budget_seconds: float = 600.0  # 10 min default
+    silence_accumulated_seconds: float = 0.0
+    was_interrupted: bool = False
+    interrupt_count: int = 0
+    
+    # Phase 8: Cost Awareness
+    tokens_used: int = 0
+    estimated_cost: float = 0.0
+    cost_budget: float = 0.50  # $0.50 default per call
+    
+    # Phase 8: Emotional State
+    emotion_history: List[Dict[str, Any]] = field(default_factory=list)
+    frustration_level: float = 0.0
+    hesitation_markers: int = 0
     
     escalation_needed: bool = False
     escalation_reason: Optional[str] = None
@@ -69,6 +108,28 @@ class AgentContext:
     def __post_init__(self):
         if self.memory is None:
             self.memory = []
+
+    @property
+    def call_elapsed_seconds(self) -> float:
+        if not self.call_started_at:
+            return 0.0
+        return (datetime.utcnow() - self.call_started_at).total_seconds()
+
+    @property
+    def remaining_time_budget(self) -> float:
+        return max(0.0, self.call_duration_budget_seconds - self.call_elapsed_seconds)
+
+    @property
+    def is_near_call_end(self) -> bool:
+        return self.remaining_time_budget < 60.0  # Less than 1 min left
+
+    @property
+    def remaining_cost_budget(self) -> float:
+        return max(0.0, self.cost_budget - self.estimated_cost)
+
+    @property
+    def is_exceeding_cost_budget(self) -> bool:
+        return self.estimated_cost >= self.cost_budget
 
 
 class AgentOrchestrator:
@@ -289,22 +350,32 @@ class AgentOrchestrator:
     def handle_low_confidence(self, context: AgentContext) -> Optional[str]:
         """
         Produce a clarification or handoff when pipeline confidence is low.
-        Returns contextual prompts based on which confidence dimension is low,
-        so the user gets a targeted, relevant clarification request.
+        Uses configurable thresholds and supports low/medium/high tiers.
         """
         conf = context.confidence
-        
-        if conf.overall < 0.4:
+        tier = conf.get_tier()
+
+        if tier == "low":
             return "I'm sorry, I'm having trouble following our conversation. Let me transfer you to a human agent who can help."
-            
-        if conf.stt < 0.5:
-            return "I apologize, but I didn't quite catch that over the line. Could you please repeat that more slowly?"
-            
-        if conf.intent < 0.5:
+
+        if tier == "medium":
+            lowest_dim = min(
+                ("speech recognition", conf.stt),
+                ("intent detection", conf.intent),
+                key=lambda x: x[1]
+            )
+            if conf.stt < conf.threshold_medium:
+                return "I want to make sure I understood correctly — could you repeat that?"
             if context.current_intent:
-                return f"I think you may be asking about {context.current_intent}, but I want to be sure. Could you tell me a bit more about what you need?"
-            return "I want to make sure I'm helping with the right thing. Could you clarify if you're asking about billing, technical support, or something else?"
-            
+                return f"If I understand correctly, you're asking about {context.current_intent}. Is that right?"
+            return "Let me make sure I'm helping with the right thing. Could you clarify a bit more?"
+
+        # High confidence — check individual dimensions
+        if conf.stt < conf.threshold_medium:
+            return "I apologize, but I didn't quite catch that. Could you please repeat that more slowly?"
+        if conf.tool_result < 0.5:
+            return "I'm having trouble looking that up right now. Let me try a different way."
+
         return None
     
     def detect_intent(self, user_message: str) -> tuple[Optional[str], float]:
@@ -403,6 +474,7 @@ class AgentOrchestrator:
         """
         Self-Correction / Reflection phase (Peak Agentic Feature).
         Reviews the response against success criteria and constraints.
+        Also estimates LLM self-confidence and updates context.
         Uses the provided llm_service (caller should pass a fast/cheap model)
         to minimize latency impact.
         """
@@ -413,7 +485,7 @@ class AgentOrchestrator:
         if len(response.split()) < 5:
             return response
 
-        # Build Reflection Prompt
+        # Build Reflection Prompt with self-confidence rating
         criteria_str = "\n".join([f"- {c}" for c in (agent.success_criteria or [])])
         failures_str = "\n".join([f"- {f}" for f in (agent.failure_conditions or [])])
         
@@ -429,10 +501,14 @@ class AgentOrchestrator:
         FAILURE CONDITIONS (Avoid these):
         {failures_str}
         
-        If the response is appropriate, repeat it verbatim.
-        If it violates criteria, provide a CORRECTED version.
+        Evaluate the response:
+        1. Is it appropriate? (yes/no)
+        2. How confident are you that this is the correct response? (0.0-1.0)
+        3. If it violates criteria, provide a CORRECTED version.
         
-        Return ONLY the final response text.
+        Format your response exactly as:
+        CONFIDENCE: <0.0-1.0>
+        CORRECTED: <the corrected response or repeat verbatim>
         """
         
         logger.info(f"Reflection Phase active for agent: {agent.name}")
@@ -442,11 +518,26 @@ class AgentOrchestrator:
             []
         )
         
+        # Extract LLM self-confidence
+        if corrected_response:
+            for line in corrected_response.split("\n"):
+                line = line.strip()
+                if line.startswith("CONFIDENCE:"):
+                    try:
+                        conf_val = float(line.split(":")[1].strip())
+                        context.confidence.llm_response = conf_val
+                        context.confidence.update_overall()
+                    except (ValueError, IndexError):
+                        pass
+                    break
+
         if corrected_response and corrected_response.strip() != response.strip():
-            final_text = corrected_response.strip()
-            if final_text.lower() != "none" and len(final_text) > 2:
-                logger.info("Self-Correction Triggered: Response improved.")
-                return final_text
+            for line in corrected_response.split("\n"):
+                if line.startswith("CORRECTED:"):
+                    final_text = line.split(":", 1)[1].strip()
+                    if final_text.lower() != "none" and len(final_text) > 2:
+                        logger.info("Self-Correction Triggered: Response improved.")
+                        return final_text
             
         return response
 

@@ -3,7 +3,12 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { Mic, ArrowRight } from 'lucide-react';
+import { Mic, ArrowRight, Loader2 } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -27,151 +32,88 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex bg-[var(--bg-base)]">
-            {/* LEFT PANEL — Brand Display (hidden on mobile) */}
-            <div className="hidden lg:flex w-1/2 bg-[var(--bg-surface)] relative overflow-hidden flex-col justify-between p-16 border-r border-[var(--border-subtle)]">
-                {/* Background ambient orbs */}
-                <div className="absolute top-[-200px] left-[-100px] w-[500px] h-[500px] rounded-full bg-[radial-gradient(circle,rgba(0,212,170,0.15)_0%,transparent_70%)] blur-[40px] pointer-events-none" />
-                <div className="absolute bottom-[-200px] right-[-100px] w-[600px] h-[600px] rounded-full bg-[radial-gradient(circle,rgba(139,92,246,0.12)_0%,transparent_70%)] blur-[40px] pointer-events-none" />
-                
-                {/* Dot grid */}
-                <div className="absolute inset-0 dot-grid opacity-[0.03] pointer-events-none" />
+        <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
+            {/* Ambient Background Grid & Glows */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.03)_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none" />
+            <div className="absolute -top-40 -left-40 size-96 rounded-full bg-primary/10 dark:bg-primary/5 blur-[120px] pointer-events-none" />
+            <div className="absolute -bottom-40 -right-40 size-96 rounded-full bg-accent/10 dark:bg-accent/5 blur-[120px] pointer-events-none" />
 
-                {/* Top header */}
-                <Link href="/" className="flex items-center gap-2.5 z-10">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--accent-cyan)] to-[var(--accent-purple)] flex items-center justify-center shadow-lg shadow-[var(--accent-cyan)]/25">
-                        <span className="text-white font-bold text-sm">V</span>
-                    </div>
-                    <span className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">Voise AI</span>
-                </Link>
-
-                {/* Middle illustration / copy */}
-                <div className="space-y-6 z-10 max-w-md my-auto">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--accent-cyan)]/10 to-[var(--accent-purple)]/10 border border-[var(--border-default)] flex items-center justify-center text-[var(--accent-cyan)] glow-brand">
-                        <Mic className="w-7 h-7" />
-                    </div>
-                    <h2 className="text-3xl font-bold leading-tight">
-                        AI-Powered <span className="text-gradient-brand">Voice Automation</span>
-                    </h2>
-                    <p className="text-[var(--text-secondary)] leading-relaxed">
-                        Log in to manage outbound call agents, payment reminders, lead qualification, and appointment automation.
-                    </p>
-                    
-                    <div className="space-y-3 pt-4">
-                        {[
-                            "AI outbound call agents",
-                            "Payment reminder calls",
-                            "Lead qualification & appointment automation"
-                        ].map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)]">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-cyan)] shadow-[0_0_6px_var(--accent-cyan)]" />
-                                <span>{item}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Footer info */}
-                <div className="z-10 text-xs text-[var(--text-tertiary)] flex items-center justify-between">
-                    <span>Voise AI</span>
-                    <span>v1.2.0-beta</span>
-                </div>
-            </div>
-
-            {/* RIGHT PANEL — Authentication Form */}
-            <div className="flex-1 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-12 relative">
-                {/* Decorative background gradients for mobile */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-[radial-gradient(circle,rgba(0,212,170,0.08)_0%,transparent_70%)] blur-[30px] lg:hidden pointer-events-none" />
-
-                <div className="w-full max-w-[420px] z-10">
-                    {/* Header Logo for Mobile */}
-                    <div className="flex flex-col items-center mb-8 lg:hidden">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--accent-cyan)] to-[var(--accent-purple)] flex items-center justify-center mb-3">
-                            <span className="text-white font-bold text-lg">V</span>
+            <Card className="w-full max-w-md bg-card/85 backdrop-blur-xl border-border shadow-xl hover:shadow-2xl transition-all relative z-10">
+                <CardHeader className="space-y-2 text-center">
+                    <div className="flex justify-center mb-2">
+                        <div className="size-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
+                            <Mic className="size-5 text-white" />
                         </div>
-                        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Voise AI</h1>
-                        <p className="text-[var(--text-secondary)] text-sm mt-1">Sign in to your account</p>
                     </div>
+                    <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Welcome back</CardTitle>
+                    <CardDescription className="text-sm">
+                        Enter your credentials to manage your voice automation.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {error && (
+                            <div className="bg-destructive/10 text-destructive text-sm rounded-xl p-3 font-medium border border-destructive/20">
+                                {error}
+                            </div>
+                        )}
 
-                    <div className="hidden lg:block mb-8">
-                        <h1 className="text-3xl font-bold text-[var(--text-primary)]">Welcome back</h1>
-                        <p className="text-[var(--text-secondary)] mt-2 text-sm">Enter your credentials to manage your voice automation.</p>
-                    </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Address</Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="name@company.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="rounded-xl"
+                            />
+                        </div>
 
-                    {/* Glass form card */}
-                    <div className="glass-card p-8 shadow-xl">
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {error && (
-                                <div className="bg-[var(--accent-rose)]/10 border border-[var(--accent-rose)]/20 text-[var(--accent-rose)] text-sm rounded-xl p-3.5 font-medium animate-fade">
-                                    {error}
-                                </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Password</Label>
+                            </div>
+                            <Input
+                                id="password"
+                                type="password"
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="rounded-xl"
+                            />
+                        </div>
+
+                        <Button 
+                            type="submit" 
+                            className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-95 text-white font-semibold shadow-lg shadow-primary/10 transition-all rounded-xl mt-2 cursor-pointer border-0" 
+                            disabled={isLoading}
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Authenticating...
+                                </>
+                            ) : (
+                                <>
+                                    Sign In
+                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                </>
                             )}
-
-                            <div>
-                                <label htmlFor="email" className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                                    Email Address
-                                </label>
-                                <input
-                                    id="email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full px-4 py-3 bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all text-sm"
-                                    placeholder="name@company.com"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <div className="flex justify-between items-center mb-2">
-                                    <label htmlFor="password" className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                                        Password
-                                    </label>
-                                </div>
-                                <input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3 bg-[var(--bg-overlay)] border border-[var(--border-default)] rounded-xl text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-cyan)] focus:ring-4 focus:ring-[var(--accent-cyan)]/5 transition-all text-sm"
-                                    placeholder="••••••••"
-                                    required
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className="w-full py-3.5 bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-cyan)]/25 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 active:scale-98"
-                            >
-                                {isLoading ? (
-                                    <span className="flex items-center gap-2">
-                                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24" fill="none">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                        </svg>
-                                        Authenticating...
-                                    </span>
-                                ) : (
-                                    <>
-                                        Sign In
-                                        <ArrowRight className="w-4 h-4" />
-                                    </>
-                                )}
-                            </button>
-                        </form>
-
-                        <div className="mt-6 pt-6 border-t border-[var(--border-subtle)] text-center">
-                            <p className="text-[var(--text-secondary)] text-sm">
-                                Don't have an account?{' '}
-                                <Link href="/register" className="text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)]/80 font-medium transition-colors">
-                                    Create one free
-                                </Link>
-                            </p>
-                        </div>
+                        </Button>
+                    </form>
+                </CardContent>
+                <CardFooter className="flex flex-col space-y-4 border-t border-border/50 pt-6">
+                    <div className="text-center text-sm text-muted-foreground w-full">
+                        Don't have an account?{' '}
+                        <Link href="/register" className="text-primary hover:text-primary/80 hover:underline font-medium transition-colors">
+                            Create one free
+                        </Link>
                     </div>
-                </div>
-            </div>
+                </CardFooter>
+            </Card>
         </div>
     );
 }

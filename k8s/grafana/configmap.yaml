@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voise-grafana-datasources
+  namespace: voise
+  labels:
+    app.kubernetes.io/name: voise-grafana
+    app.kubernetes.io/part-of: voise
+data:
+  prometheus.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://voise-prometheus:9090
+        isDefault: true
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voise-grafana-dashboards
+  namespace: voise
+  labels:
+    app.kubernetes.io/name: voise-grafana
+    app.kubernetes.io/part-of: voise
+data:
+  dashboards.yml: |
+    apiProvider: 1
+    providers:
+      - name: "Voise AI Dashboards"
+        orgId: 1
+        folder: "Voise AI"
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /etc/grafana/provisioning/dashboards

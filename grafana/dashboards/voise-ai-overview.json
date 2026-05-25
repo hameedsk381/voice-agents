@@ -1,0 +1,140 @@
+{
+  "title": "Voise AI — Platform Overview",
+  "uid": "voise-ai-overview",
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "panels": [
+    {
+      "title": "HTTP Request Rate",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[5m])",
+          "legendFormat": "{{method}} {{path}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Incoming HTTP request rate per 5m window"
+    },
+    {
+      "title": "HTTP Latency (p50/p95/p99)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(voice_turn_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(voice_turn_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(voice_turn_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "description": "HTTP request latency percentiles"
+    },
+    {
+      "title": "Active Voice Sessions",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "voice_active_sessions",
+          "legendFormat": "active",
+          "refId": "A"
+        }
+      ],
+      "description": "Currently active voice sessions"
+    },
+    {
+      "title": "Call Volume",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(voice_calls_total[1h])",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Call volume by outcome per hour"
+    },
+    {
+      "title": "Turn Latency by Phase",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(voice_turn_latency_ms_sum[5m]) / rate(voice_turn_latency_ms_count[5m])",
+          "legendFormat": "{{phase}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Average turn latency broken down by processing phase"
+    },
+    {
+      "title": "Accumulated Cost by Model",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(voice_cost_total_usd[1h])",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Cost accumulation rate per model"
+    },
+    {
+      "title": "Error Rate",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(voice_errors_total[5m])",
+          "legendFormat": "{{error_type}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Error rate by type"
+    },
+    {
+      "title": "Process Memory",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "process_memory_usage_bytes",
+          "legendFormat": "RSS",
+          "refId": "A"
+        }
+      ],
+      "description": "Backend process memory usage"
+    },
+    {
+      "title": "Active Temporal Workflows",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "temporal_active_workflows",
+          "legendFormat": "active",
+          "refId": "A"
+        }
+      ],
+      "description": "Active Temporal workflow executions"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["voise-ai", "observability"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s"
+}

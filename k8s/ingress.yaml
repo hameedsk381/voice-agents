@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voise-ingress
+  namespace: voise
+  labels:
+    app.kubernetes.io/name: voise-ai
+    app.kubernetes.io/part-of: voise
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/websocket-services: "voise-backend"
+    nginx.ingress.kubernetes.io/proxy-set-headers: "proxy-headers"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - voise.ai
+        - api.voise.ai
+      secretName: voise-tls
+  rules:
+    - host: voise.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: voise-frontend
+                port:
+                  number: 3000
+    - host: api.voise.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: voise-backend
+                port:
+                  number: 8001

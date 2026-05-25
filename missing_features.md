@@ -1,4 +1,20 @@
-Love the direction. What you’ve described is **solid v1 engineering** — but if you’re aiming for **BlueMachine-class / enterprise-grade** (and honestly, category-defining), there *are* some important gaps.
+# Enterprise gap analysis
+
+> **Note (May 2026):** Several items below are **partially or fully addressed** in the current codebase. This doc remains useful for **remaining** enterprise depth. See [DOCS.md](./DOCS.md) and [features.md](./features.md) for what is already shipped.
+
+### Recently shipped (no longer “missing”)
+
+| Area | Implementation |
+|------|----------------|
+| Conversation policy / guardrails | `PolicyEngine`, compliance audit, script enforcement — [VOICE_PIPELINE.md](./VOICE_PIPELINE.md) |
+| Human-in-the-loop | HITL dashboard, takeover/whisper, workflow `hitl_approval` nodes |
+| Workflow automation | Phase 1+2 done — [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) |
+| Observability | Monitoring WS, analytics, shadow model, call logs |
+| Memory governance | TTLs, memory types, consent — `MemoryService` |
+
+---
+
+Love the direction. What you’ve described is **solid v1 engineering** — but if you’re aiming for **BlueMachine-class / enterprise-grade** (and honestly, category-defining), there *are* still important gaps.
 
 I’ll break this into **what’s missing**, **why it matters**, and **how modern platforms are solving it today**. No fluff.
 

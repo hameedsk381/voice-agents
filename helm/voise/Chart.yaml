@@ -1,0 +1,18 @@
+apiVersion: v2
+name: voise
+description: Voise AI — Enterprise Voice Automation Platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+icon: https://voise.ai/icon.svg
+keywords:
+  - voice
+  - ai
+  - automation
+  - ultravox
+  - telephony
+sources:
+  - https://github.com/anomalyco/voice-agents
+maintainers:
+  - name: Voise AI Team
+    email: dev@voise.ai

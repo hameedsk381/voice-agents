@@ -33,6 +33,7 @@ class TokenData(BaseModel):
     user_id: Optional[str] = None
     email: Optional[str] = None
     role: Optional[str] = None
+    organization_id: Optional[str] = None
     jti: Optional[str] = None
     exp: Optional[int] = None
 
@@ -78,20 +79,23 @@ def decode_token(token: str) -> Optional[TokenData]:
         user_id: str = payload.get("sub")
         email: str = payload.get("email")
         role: str = payload.get("role")
+        organization_id: str = payload.get("org_id")
         jti: str = payload.get("jti")
         exp: int = payload.get("exp")
         
         if user_id is None:
             return None
         
-        return TokenData(user_id=user_id, email=email, role=role, jti=jti, exp=exp)
+        return TokenData(user_id=user_id, email=email, role=role, organization_id=organization_id, jti=jti, exp=exp)
     except JWTError:
         return None
 
 
-def create_tokens(user_id: str, email: str, role: str) -> Token:
+def create_tokens(user_id: str, email: str, role: str, organization_id: Optional[str] = None) -> Token:
     """Create both access and refresh tokens for a user."""
     token_data = {"sub": user_id, "email": email, "role": role}
+    if organization_id:
+        token_data["org_id"] = organization_id
     
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
