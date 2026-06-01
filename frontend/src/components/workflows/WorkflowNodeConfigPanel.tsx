@@ -190,6 +190,44 @@ export default function WorkflowNodeConfigPanel({ node, onUpdate, onClose }: Pro
               className="w-full glass-input px-2 py-1.5 text-sm"
             />
           </label>
+          <details className="mt-2">
+            <summary className="text-[10px] font-semibold text-[var(--text-secondary)] cursor-pointer">
+              Pre-call data fetch
+            </summary>
+            <div className="space-y-2 mt-2 pl-2 border-l border-[var(--border-default)]">
+              <label className="block space-y-1">
+                <span className="text-[10px] text-[var(--text-secondary)]">URL (supports {'{'}phone{'}'} templates)</span>
+                <input
+                  type="text"
+                  value={String(config.data_fetch_url ?? '')}
+                  onChange={(e) => setConfigField('data_fetch_url', e.target.value)}
+                  placeholder="https://api.example.com/customer/{phone}"
+                  className="w-full glass-input px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] text-[var(--text-secondary)]">Method</span>
+                <select
+                  value={String(config.data_fetch_method ?? 'GET')}
+                  onChange={(e) => setConfigField('data_fetch_method', e.target.value)}
+                  className="w-full glass-input px-2 py-1.5 text-sm"
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] text-[var(--text-secondary)]">Response key (context variable)</span>
+                <input
+                  type="text"
+                  value={String(config.data_fetch_response_key ?? 'precall_data')}
+                  onChange={(e) => setConfigField('data_fetch_response_key', e.target.value)}
+                  placeholder="precall_data"
+                  className="w-full glass-input px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+          </details>
         </>
       )}
 

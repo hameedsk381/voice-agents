@@ -19,6 +19,7 @@ from app.orchestration.session_manager import session_manager
 from app.services.monitoring_service import monitoring_service
 from app.services.telephony_service import telephony_service
 from app.services.telephony.factory import get_telephony_provider
+from app.services.tuner_service import tuner as tuner_service
 from app.services.tools.registry import AVAILABLE_TOOLS
 
 import json
@@ -300,6 +301,12 @@ async def outgoing_call(
 
     if call_id:
         logger.info(f"Outbound call initiated via {settings.TELEPHONY_PROVIDER}: ID={call_id}")
+        await tuner_service.on_call_start(
+            call_id=call_id,
+            agent_id=agent_id,
+            to_number=to_number,
+            from_number=from_number,
+        )
         return {"status": "initiated", "call_id": call_id, "to": to_number, "provider": settings.TELEPHONY_PROVIDER}
     else:
         return Response(status_code=500, content="Call initiation failed — check provider credentials")

@@ -354,6 +354,31 @@ async def list_instances(
     return [_instance_dict(i) for i in instances]
 
 
+@router.post("/trigger/{workflow_id}")
+async def trigger_workflow(
+    workflow_id: str,
+    request: Request,
+    db: Session = Depends(database.get_db),
+):
+    """API Trigger endpoint — external systems can start a workflow without auth."""
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    context = body if isinstance(body, dict) else {}
+    service = WorkflowService(db)
+    from app.models.workflow import Workflow
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.status == "active").first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found or not active")
+    try:
+        inst = await service.create_instance(
+            workflow_id,
+            context=context,
+            auto_start=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"instance_id": inst.id, "status": inst.status}
+
+
 @router.post("/{workflow_id}/instances")
 async def start_instance(
     workflow_id: str,

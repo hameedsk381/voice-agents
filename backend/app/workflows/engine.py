@@ -3,14 +3,18 @@ In-process workflow executor (v1). Temporal can wrap this later for durability.
 """
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+import aiohttp
 from loguru import logger
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.models.hitl import PendingAction
+from app.services.tuner_service import tuner as _tuner
 from app.workflows.schema import (
     ConditionOperator,
     ConditionRule,
@@ -19,6 +23,14 @@ from app.workflows.schema import (
     WorkflowDefinitionV1,
     WorkflowNode,
 )
+
+
+def _resolve_template(template: str, context: Dict[str, Any]) -> str:
+    """Replace {{var}} placeholders with values from context."""
+    def _replacer(m: re.Match) -> str:
+        key = m.group(1).strip()
+        return str(context.get(key, m.group(0)))
+    return re.sub(r"\{\{(\w+)\}\}", _replacer, template)  # type: ignore[arg-type]
 
 
 def _get_field(context: Dict[str, Any], field: str) -> Any:
@@ -119,6 +131,29 @@ class WorkflowEngine:
                 "last_step": "voice_call",
                 "last_call_status": "queued",
             }
+
+            data_fetch_url = node.config.get("data_fetch_url", "")
+            if data_fetch_url:
+                try:
+                    resolved_url = _resolve_template(data_fetch_url, {**instance_meta, **context})
+                    method = node.config.get("data_fetch_method", "GET").upper()
+                    headers = node.config.get("data_fetch_headers", {})
+                    response_key = node.config.get("data_fetch_response_key", "precall_data")
+                    async with aiohttp.ClientSession() as session:
+                        if method == "POST":
+                            body_template = node.config.get("data_fetch_body", "")
+                            body = _resolve_template(body_template, {**instance_meta, **context}) if body_template else None
+                            async with session.post(resolved_url, headers=headers, json=json.loads(body) if body else None) as resp:
+                                data = await resp.json()
+                        else:
+                            async with session.get(resolved_url, headers=headers) as resp:
+                                data = await resp.json()
+                    patch[response_key] = data
+                    logger.info(f"Pre-call data fetch from {resolved_url}: OK")
+                except Exception as exc:
+                    logger.warning(f"Pre-call data fetch failed: {exc}")
+                    patch["precall_fetch_error"] = str(exc)
+
             campaign_id = context.get("campaign_id") or instance_meta.get("campaign_id")
             contact_id = context.get("contact_id") or instance_meta.get("contact_id")
             if campaign_id and contact_id:
@@ -590,6 +625,17 @@ class WorkflowEngine:
             )
             context["_step_history"] = history
 
+            await _tuner.on_node_execute(
+                instance_id=instance_meta.get("instance_id", ""),
+                node_id=node.id,
+                node_type=node.type.value,
+                status=result.status,
+                context_snapshot={
+                    k: v for k, v in context.items()
+                    if not k.startswith("_") and isinstance(v, (str, int, float, bool, type(None)))
+                },
+            )
+
             if result.status == "completed":
                 tracker = context.get("_fork_tracker")
                 if tracker and tracker.get("pending"):
@@ -601,6 +647,13 @@ class WorkflowEngine:
                     node_id = tracker["join_node"]
                     context["_fork_tracker"] = None
                     continue
+                await _tuner.on_workflow_complete(
+                    instance_id=instance_meta.get("instance_id", ""),
+                    workflow_id=instance_meta.get("workflow_id", ""),
+                    status="completed",
+                    duration_seconds=0,
+                    outcome=context.get("workflow_outcome"),
+                )
                 return {
                     "status": "completed",
                     "current_node_id": node.id,
@@ -608,6 +661,13 @@ class WorkflowEngine:
                     "outcome": context.get("workflow_outcome"),
                 }
             if result.status == "failed":
+                await _tuner.on_workflow_complete(
+                    instance_id=instance_meta.get("instance_id", ""),
+                    workflow_id=instance_meta.get("workflow_id", ""),
+                    status="failed",
+                    duration_seconds=0,
+                    outcome=result.message,
+                )
                 return {
                     "status": "failed",
                     "current_node_id": node.id,
