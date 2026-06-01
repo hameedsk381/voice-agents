@@ -60,7 +60,7 @@ def require_feature(feature: str):
     """FastAPI dependency factory: require org's plan to include a specific feature.
 
     Usage:
-        @router.get("/stages", dependencies=[Depends(require_feature("ultravox_call_stages"))])
+        @router.get("/stages", dependencies=[Depends(require_feature("workflow_automation"))])
     """
     from app.services.usage_service import FEATURE_TIER_MAP
 

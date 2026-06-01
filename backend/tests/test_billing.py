@@ -36,7 +36,6 @@ def test_enterprise_limits_infinite():
 
 
 def test_feature_tier_map():
-    assert FEATURE_TIER_MAP["ultravox_call_stages"] == "professional"
     assert FEATURE_TIER_MAP["compliance_audit"] == "enterprise"
     assert FEATURE_TIER_MAP["whatsapp_messaging"] == "professional"
 

@@ -25,7 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* && \
     addgroup --system --gid 1001 voise && \
-    adduser --system --uid 1001 voise
+    adduser --system --uid 1001 --home /home/voise voise && \
+    mkdir -p /home/voise/.cache/huggingface && \
+    chown -R voise:voise /home/voise
 
 ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages
 
@@ -34,6 +36,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY --chown=voise:voise . .
 
+ENV HF_HOME=/home/voise/.cache/huggingface
 USER voise
 EXPOSE 8001
 

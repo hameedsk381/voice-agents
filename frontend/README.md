@@ -7,7 +7,7 @@ Next.js 16 dashboard and marketing site for Voise AI.
 - **Next.js 16** (App Router) · **React 19** · **TypeScript**
 - **Tailwind CSS v4** — light/dark themes via `ThemeContext`
 - **@xyflow/react** — workflow visual editor
-- **ultravox-client** — WebRTC voice in agent playground
+- **Sarvam STT/TTS** — voice provider in agent playground
 - **recharts** — analytics charts
 
 ## Development

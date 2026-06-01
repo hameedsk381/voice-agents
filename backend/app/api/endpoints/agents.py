@@ -13,35 +13,12 @@ from app.models import agent as models
 from app.models.analytics import CallLog
 from app.models.compliance import AuditLog
 from app.models.user import User
-from app.orchestration.ultravox_call import merge_ultravox_config
-from app.orchestration.websocket_proxy import is_ultravox_runtime
 from app.schemas import agent as schemas
 from app.schemas.policy import ConversationPolicy
 from app.services.analytics_service import AnalyticsService
 from app.services.compliance_service import get_baseline_rules
-from app.services.ultravox_agent_sync import (
-    delete_ultravox_agent_for_voise_agent,
-    sync_agent_to_ultravox,
-)
 
 router = APIRouter()
-
-
-async def _persist_ultravox_sync(db_agent: models.Agent, db: Session) -> None:
-    if not is_ultravox_runtime():
-        return
-    try:
-        uv_id = await sync_agent_to_ultravox(db_agent)
-        if uv_id:
-            db_agent.config = merge_ultravox_config(
-                db_agent.config,
-                ultravox_agent_id=uv_id,
-                synced_at=datetime.now(timezone.utc).isoformat(),
-            )
-            db.commit()
-            db.refresh(db_agent)
-    except Exception as exc:
-        logger.warning(f"Ultravox sync deferred for agent {db_agent.id}: {exc}")
 
 
 @router.post("/", response_model=schemas.Agent)
@@ -71,7 +48,6 @@ async def create_agent(
     db.add(db_agent)
     db.commit()
     db.refresh(db_agent)
-    await _persist_ultravox_sync(db_agent, db)
     return db_agent
 
 
@@ -124,41 +100,6 @@ async def update_agent(
 
     db.commit()
     db.refresh(db_agent)
-    await _persist_ultravox_sync(db_agent, db)
-    return db_agent
-
-
-@router.post("/{agent_id}/sync-ultravox", response_model=schemas.Agent)
-async def sync_ultravox_agent(
-    agent_id: str,
-    db: Session = Depends(database.get_db),
-    current_user: User = Depends(get_current_user_required),
-):
-    """Push the latest Voise agent config to the linked Ultravox Agent template."""
-    if not is_ultravox_runtime():
-        raise HTTPException(
-            status_code=503,
-            detail="Ultravox is not configured. Set ULTRAVOX_API_KEY and VOICE_RUNTIME=ultravox.",
-        )
-
-    q = db.query(models.Agent).filter(models.Agent.id == agent_id)
-    if current_user.organization_id:
-        q = q.filter(models.Agent.organization_id == current_user.organization_id)
-    db_agent = q.first()
-    if db_agent is None:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    uv_id = await sync_agent_to_ultravox(db_agent)
-    if not uv_id:
-        raise HTTPException(status_code=502, detail="Ultravox agent sync failed")
-
-    db_agent.config = merge_ultravox_config(
-        db_agent.config,
-        ultravox_agent_id=uv_id,
-        synced_at=datetime.now(timezone.utc).isoformat(),
-    )
-    db.commit()
-    db.refresh(db_agent)
     return db_agent
 
 
@@ -175,7 +116,6 @@ async def delete_agent(
     if db_agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    await delete_ultravox_agent_for_voise_agent(db_agent)
     db.delete(db_agent)
     db.commit()
     return {"ok": True}
@@ -188,7 +128,6 @@ def create_agent_version(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Create a new snapshot/version of an agent."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -222,7 +161,6 @@ def get_agent_versions(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """List all versions for an agent."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -243,7 +181,7 @@ async def pin_agent_version(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Pin the agent to a specific version and re-sync the Ultravox Agent template."""
+    """Pin the agent to a specific version."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -257,25 +195,6 @@ async def pin_agent_version(
     db.commit()
     db.refresh(db_agent)
 
-    if is_ultravox_runtime():
-        try:
-            uv_id = await sync_agent_to_ultravox(
-                db_agent,
-                active_persona=db_version.persona,
-                active_tools=db_version.tools,
-            )
-            if uv_id:
-                db_agent.config = merge_ultravox_config(
-                    db_agent.config,
-                    ultravox_agent_id=uv_id,
-                    synced_at=datetime.now(timezone.utc).isoformat(),
-                )
-                db.commit()
-        except Exception as exc:
-            logger.warning(
-                f"Ultravox sync after pin failed for agent {agent_id}: {exc}"
-            )
-
     return {"status": "pinned", "version": db_version.version_number}
 
 
@@ -286,7 +205,6 @@ async def get_agent_analytics(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Get per-agent analytics: overview metrics + daily call trends."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -307,7 +225,6 @@ async def get_agent_analytics(
         CallLog.agent_id == agent_id
     ).group_by(CallLog.outcome).all()
 
-    # Daily trends for this agent
     from datetime import datetime as dt, timedelta
     start_date = dt.utcnow() - timedelta(days=days)
     daily = db.query(
@@ -338,7 +255,6 @@ def get_agent_calls(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Get recent call logs for a specific agent."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -374,7 +290,6 @@ def get_agent_policy(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Get the current conversation policy for an agent."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -400,7 +315,6 @@ def update_agent_policy(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Update the conversation policy for an agent."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)
@@ -422,7 +336,6 @@ def get_agent_compliance(
     db: Session = Depends(database.get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Get compliance summary for an agent's calls."""
     q = db.query(models.Agent).filter(models.Agent.id == agent_id)
     if current_user.organization_id:
         q = q.filter(models.Agent.organization_id == current_user.organization_id)

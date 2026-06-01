@@ -1,9 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 
 class StageDefinition(BaseModel):
-    """A named conversation stage that can be switched to mid-call via a stage-change tool."""
+    """A named conversation stage that can be switched to mid-call."""
     name: str
     system_prompt: Optional[str] = None
     voice: Optional[str] = None
@@ -12,19 +12,7 @@ class StageDefinition(BaseModel):
     tools: Optional[List[str]] = None
 
 
-class InactivityMessage(BaseModel):
-    text: str
-    duration_seconds: int
-    end_behaviour: str = "END_BEHAVIOR_UNSPECIFIED"
-
-
-class DeferredMessage(BaseModel):
-    message: str
-    delay: str = "5m"
-    medium: str = "sms"
-
-
-class UltravoxJoinRequest(BaseModel):
+class JoinRequest(BaseModel):
     language: Optional[str] = None
     voice: Optional[str] = None
     caller_id: Optional[str] = None
@@ -39,16 +27,13 @@ class UltravoxJoinRequest(BaseModel):
     prior_call_id: Optional[str] = None
 
 
-class UltravoxJoinResponse(BaseModel):
-    join_url: str
-    call_id: str
+class JoinResponse(BaseModel):
     session_id: str
     agent_id: str
     agent_name: str
-    voice: str
-    language: str
-    tool_names: List[str] = []
-    ultravox_agent_id: Optional[str] = None
+    voice: str = ""
+    language: str = "en-IN"
+    status: str = "ok"
 
 
 class ChatRequest(BaseModel):

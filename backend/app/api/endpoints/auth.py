@@ -108,15 +108,19 @@ async def register(
     from app.models.billing import Subscription, SubscriptionStatus
     import uuid
 
-    org = Organization(
-        id=str(uuid.uuid4()),
-        name=f"{user_data.email.split('@')[0]}",
-        domain=user_data.email.split('@')[1],
-        subscription_plan="free",
-        is_active=True,
-    )
-    db.add(org)
-    db.flush()
+    org_domain = user_data.email.split('@')[1]
+    org = db.query(Organization).filter(Organization.domain == org_domain).first()
+    is_new_org = org is None
+    if is_new_org:
+        org = Organization(
+            id=str(uuid.uuid4()),
+            name=f"{user_data.email.split('@')[0]}",
+            domain=org_domain,
+            subscription_plan="free",
+            is_active=True,
+        )
+        db.add(org)
+        db.flush()
 
     user = User(
         email=user_data.email,
@@ -135,25 +139,25 @@ async def register(
     db.add(user)
     db.flush()
 
-    # Create trial subscription (14 days, 50 minutes)
-    today = date.today()
-    period_start = today.replace(day=1)
-    if today.month == 12:
-        period_end = period_start.replace(year=period_start.year + 1, month=1, day=1)
-    else:
-        period_end = period_start.replace(month=period_start.month + 1, day=1)
+    if is_new_org:
+        today = date.today()
+        period_start = today.replace(day=1)
+        if today.month == 12:
+            period_end = period_start.replace(year=period_start.year + 1, month=1, day=1)
+        else:
+            period_end = period_start.replace(month=period_start.month + 1, day=1)
 
-    sub = Subscription(
-        organization_id=org.id,
-        plan="free",
-        status=SubscriptionStatus.TRIALING.value,
-        billing_period_start=period_start,
-        billing_period_end=period_end,
-        trial_starts_at=datetime.utcnow(),
-        trial_ends_at=datetime.utcnow() + timedelta(days=14),
-        auto_renew="true",
-    )
-    db.add(sub)
+        sub = Subscription(
+            organization_id=org.id,
+            plan="free",
+            status=SubscriptionStatus.TRIALING.value,
+            billing_period_start=period_start,
+            billing_period_end=period_end,
+            trial_starts_at=datetime.utcnow(),
+            trial_ends_at=datetime.utcnow() + timedelta(days=14),
+            auto_renew="true",
+        )
+        db.add(sub)
     db.commit()
     db.refresh(user)
 

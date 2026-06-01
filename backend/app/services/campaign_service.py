@@ -168,10 +168,9 @@ class CampaignService:
         from_number: Optional[str] = None,
         organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Place an outbound Ultravox/Twilio call for one campaign contact."""
-        from app.core.config import settings
-        import os
-        from app.orchestration.ultravox_twilio import create_ultravox_twilio_call
+        """Place an outbound call for one campaign contact (Ultravox removed — stubbed)."""
+        from loguru import logger
+        logger.warning(f"place_call called for campaign {campaign_id} contact {contact_id} — Ultravox integration removed")
 
         campaign = await self.get_campaign(campaign_id, organization_id=organization_id)
         if not campaign:
@@ -188,40 +187,13 @@ class CampaignService:
         if not contact:
             raise ValueError("Contact not found")
 
-        agent = self.db.query(Agent).filter(Agent.id == campaign.agent_id).first()
-        if not agent:
-            raise ValueError("Agent not found for campaign")
-
-        from_e164 = (
-            from_number
-            or settings.TWILIO_PHONE_NUMBER
-            or os.getenv("TWILIO_FROM_NUMBER")
-        )
-        if not from_e164:
-            raise ValueError("Missing TWILIO_PHONE_NUMBER for outbound dial")
-
-        contact.status = ContactStatus.IN_PROGRESS.value
-        self.db.commit()
-
-        created = await create_ultravox_twilio_call(
-            db=self.db,
-            agent=agent,
-            call_direction="outbound",
-            caller_id=from_e164,
-            called_number=contact.phone_number,
-            twilio_call_sid=None,
-            outgoing_to=contact.phone_number,
-            outgoing_from=from_e164,
-            campaign=campaign,
-            campaign_contact=contact,
-        )
-        contact.session_id = created["session_id"]
+        contact.status = ContactStatus.FAILED.value
+        contact.error_message = "Outbound calling unavailable — Ultravox removed"
         self.db.commit()
 
         return {
-            "status": "initiated",
-            "session_id": created["session_id"],
-            "call_id": created["call"].get("callId"),
+            "status": "failed",
+            "reason": "Outbound calling requires Ultravox integration which has been removed",
             "contact_id": contact.id,
         }
 

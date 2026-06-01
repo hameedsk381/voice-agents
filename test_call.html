@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voise AI — Groq Voice Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui; max-width: 500px; margin: 40px auto; padding: 0 20px; text-align: center; }
+    button { padding: 12px 24px; font-size: 16px; border-radius: 8px; border: none; cursor: pointer; margin: 8px; }
+    #joinBtn { background: #1a73e8; color: white; }
+    #leaveBtn { background: #dc3545; color: white; }
+    #status { margin: 20px 0; padding: 12px; border-radius: 8px; background: #f5f5f5; }
+    #log { margin-top: 20px; text-align: left; font-size: 13px; background: #1a1a1a; color: #0f0; padding: 16px; border-radius: 8px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+    .connected { background: #d4edda !important; }
+    .disconnected { background: #f8d7da !important; }
+  </style>
+</head>
+<body>
+  <h2>Groq Voice Agent Test</h2>
+  <p>Room: <strong id="roomName">groq-ff1b44</strong></p>
+  
+  <button id="joinBtn" onclick="join()">Join Room</button>
+  <button id="leaveBtn" onclick="leave()" disabled>Leave</button>
+  
+  <div id="status">Click "Join Room" to start</div>
+  <div id="log"></div>
+
+  <script>
+    const ROOM = 'groq-ff1b44';
+    const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiVGVzdCBVc2VyIiwidmlkZW8iOnsicm9vbUpvaW4iOnRydWUsInJvb20iOiJncm9xLWZmMWI0NCIsImNhblB1Ymxpc2giOnRydWUsImNhblN1YnNjcmliZSI6dHJ1ZSwiY2FuUHVibGlzaERhdGEiOnRydWV9LCJzdWIiOiJ1LTViOTdlNCIsImlzcyI6IkFQSXJwdThhU0E3YmhZNyIsIm5iZiI6MTc4MDI5NTU3NCwiZXhwIjoxNzgwMzE3MTc0fQ.Z1JY4OSaxdzB_OVb1l6IWOHEjPJrcZGQEdv7MLPCE0Y';
+    const URL = 'wss://voiseai-ksmso357.livekit.cloud';
+    
+    let room = null;
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    
+    function log(msg) {
+      const t = new Date().toLocaleTimeString();
+      logEl.textContent += `[${t}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function join() {
+      try {
+        room = new LivekitClient.Room({
+          adaptiveStream: true,
+          dynacast: true,
+        });
+
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          log(`Agent speaking: ${track.kind}`);
+          if (track.kind === 'audio') {
+            const el = track.attach();
+            el.autoplay = true;
+            document.body.appendChild(el);
+            el.play().catch(e => log('Audio play error: ' + e.message));
+          }
+        });
+
+        room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+          track.detach();
+        });
+
+        room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
+          const text = new TextDecoder().decode(payload);
+          log(`Agent transcription: ${text}`);
+        });
+
+        room.on(LivekitClient.RoomEvent.Disconnected, () => {
+          statusEl.textContent = 'Disconnected';
+          statusEl.className = 'disconnected';
+          document.getElementById('joinBtn').disabled = false;
+          document.getElementById('leaveBtn').disabled = true;
+          log('Disconnected from room');
+        });
+
+        await room.connect(URL, TOKEN);
+        log('Connected to room!');
+        
+        // Publish mic
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioTrack = LivekitClient.createLocalAudioTrack();
+        await room.localParticipant.publishTrack(audioTrack, { source: LivekitClient.TrackSource.SourceMicrophone });
+        
+        statusEl.textContent = 'Connected — speaking to Groq agent...';
+        statusEl.className = 'connected';
+        document.getElementById('joinBtn').disabled = true;
+        document.getElementById('leaveBtn').disabled = false;
+        log('Mic published — agent should greet you now');
+      } catch (e) {
+        log('Error: ' + e.message);
+        statusEl.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function leave() {
+      if (room) {
+        room.disconnect();
+        room = null;
+      }
+    }
+  </script>
+</body>
+</html>

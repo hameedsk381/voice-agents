@@ -50,9 +50,6 @@ PLAN_LIMITS: Dict[str, Dict[str, float]] = {
 
 
 FEATURE_TIER_MAP: Dict[str, str] = {
-    "ultravox_call_stages": "professional",
-    "ultravox_http_tools": "professional",
-    "ultravox_shared_secrets": "enterprise",
     "workflow_automation": "professional",
     "whatsapp_messaging": "professional",
     "sms_messaging": "professional",

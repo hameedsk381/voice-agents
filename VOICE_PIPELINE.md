@@ -61,8 +61,9 @@ This happens in the background to avoid blocking the voice interaction:
 
 ## Technical Stack
 - **Orchestration:** Python / FastAPI / Asyncio
-- **Default voice runtime:** Ultravox (`VOICE_RUNTIME=ultravox`, `ultravox-client` in playground)
-- **Legacy / custom path:** Groq LLM + Mock/Deepgram STT + Qwen/Deepgram TTS
+- **Default voice runtime:** LiveKit (`VOICE_RUNTIME=livekit`, `NEXT_PUBLIC_VOICE_RUNTIME=livekit`)
+- **LiveKit path:** Browser joins a LiveKit room, `/api/v1/livekit/token/{agent_id}` dispatches `voise-livekit-agent`, and `backend/livekit_agent.py` runs the STT + LLM + TTS `AgentSession`.
+- **Legacy / custom path:** Groq LLM + Mock/Deepgram/Sarvam STT + Qwen/Deepgram/Sarvam TTS via `/api/v1/orchestrator/ws/{agent_id}`
 - **Policy Engine:** Custom State Machine + Guardrails
 - **Real-time HITL:** Redis Pub/Sub
 - **Telephony:** Twilio webhooks + Ultravox medium

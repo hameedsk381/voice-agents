@@ -1,116 +1,183 @@
 # Voise AI
 
-**Voise AI** is an enterprise voice automation platform: deploy AI agents for outbound campaigns, collections follow-up, lead qualification, and appointment confirmation — with **workflow automation**, human-in-the-loop approvals, and live monitoring.
+**Open-source voice agent platform** — build, deploy, and monitor multilingual voice AI agents with drag-and-drop workflows, multi-provider STT/TTS/LLM, telephony integration, and enterprise-grade compliance.
 
-## Capabilities
-
-| Area | What you get |
-|------|----------------|
-| **Voice** | Ultravox runtime (default) + Twilio telephony; agent playground & live calls |
-| **Agents** | Goals, success criteria, tools, knowledge base (RAG), Ultravox sync |
-| **Campaigns** | CSV contacts, start/pause, optional **workflow per contact** |
-| **Workflows** | Visual + JSON builder, templates (collections, sales, healthcare), SAP CSV ingest, email steps |
-| **Operations** | Live monitoring, call logs, analytics, HITL approvals, marketplace templates |
-| **Platform** | JWT auth, multi-tenancy, compliance audit, memory governance, shadow model comparison |
-
-**Workflow docs:** [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md) · **All docs:** [DOCS.md](./DOCS.md)
+A self-hosted alternative to Vapi, Retell, and Dograh.
 
 ---
 
-## Project structure
+## Features
 
-| Path | Stack |
-|------|--------|
-| `frontend/` | Next.js 16, React 19, Tailwind v4, `@xyflow/react` workflow canvas |
-| `backend/` | FastAPI, SQLAlchemy, Alembic, Temporal (call workflows), Redis |
-| `docker-compose.yml` | PostgreSQL (pgvector), Redis, Temporal |
+| Area | What you get |
+|------|-------------|
+| **Voice pipeline** | Google Cloud, Groq, Deepgram, Sarvam AI, Qwen — pick any STT/TTS/LLM combo per agent |
+| **Multilingual** | Hindi, Tamil, Telugu, English, and more via Sarvam AI + Google Cloud |
+| **Workflow builder** | Visual drag-and-drop canvas (React Flow) + JSON editor + AI generation from text |
+| **Telephony** | Twilio inbound/outbound with Media Streams |
+| **Campaigns** | CSV upload, bulk outbound dialing, pause/resume, retry logic, per-contact workflow |
+| **RAG** | Knowledge base with pgvector embeddings, semantic search injected into live calls |
+| **Tools** | HTTP API, call transfer, MCP, Aadhaar/PAN/UPI/GST lookups, and more |
+| **Agent memory** | 4-layer: episodic, working, long-term (pgvector), procedural, with TTLs and consent |
+| **Compliance** | Per-turn policy engine (permit/deny/escalate), Ed25519 audit chain, PII detection |
+| **Human-in-the-loop** | Supervisor takeover, whisper mode, approval queues, live monitoring WebSocket |
+| **Multi-agent** | Swarm orchestration with autonomous capability discovery and routing |
+| **Observability** | OpenTelemetry, Prometheus metrics, per-span tracing, post-call QA |
+| **Analytics** | Call logs, outcome classification, satisfaction estimation, shadow model comparison |
+| **Billing** | Subscription management, usage metering, rate cards, cost estimation |
+| **WhatsApp** | Twilio WhatsApp Business API with templates and delivery status |
 
 ---
 
 ## Quick start
 
-### 1. Environment
+### Prerequisites
+
+- Docker & Docker Compose
+- API keys for your chosen providers (see Configuration)
+
+### 1. Clone and configure
 
 ```bash
-cp backend/.env.example backend/.env
-# Required for voice: ULTRAVOX_API_KEY
-# Optional: GROQ_API_KEY, TWILIO_*, SMTP_* (workflow email)
+git clone https://github.com/hameedsk381/voice-agents.git
+cd voice-agents
+cp backend/.env.example .env
+# Edit .env with your API keys
 ```
 
-### 2. Infrastructure
+Minimal `.env` for a Google Cloud pipeline:
 
-```bash
-docker compose up -d postgres redis temporal
-cd backend && alembic upgrade head
+```env
+VOICE_RUNTIME=livekit
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your-api-key
+LIVEKIT_API_SECRET=your-api-secret
+GOOGLE_API_KEY=your-gemini-api-key
+GOOGLE_APPLICATION_CREDENTIALS=./gcp-key.json
 ```
 
-Postgres listens on **5435** (host) per `docker-compose.yml`.
-
-### 3. Backend
+### 2. Start the platform
 
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8001
+docker compose up -d
 ```
 
-### 4. Frontend
+This starts: PostgreSQL (pgvector), Redis, Prometheus, Grafana, OpenTelemetry collector, the API backend, and the LiveKit agent.
+
+### 3. Run database migrations
 
 ```bash
-cd frontend
-npm install
-npm run dev
+docker compose exec backend alembic upgrade head
 ```
 
-The frontend proxies `/api/v1/*` → `http://localhost:8001` (see `frontend/next.config.ts`), avoiding CORS in local dev.
+### 4. Open the dashboard
 
-Open [http://localhost:3000](http://localhost:3000).
+[http://localhost:3000](http://localhost:3000)
 
-### 5. Demo data (optional)
+### 5. Seed demo data (optional)
 
 ```bash
-cd backend
-python -m scripts.seed_demo_data
+docker compose exec backend python -m scripts.seed_demo_data
 ```
 
 | Field | Value |
-|-------|--------|
+|-------|-------|
 | Email | `demo@voise.ai` |
 | Password | `DemoVoise2026!` |
 
 ---
 
-## Configuration (essentials)
+## Architecture
 
-| Variable | Purpose |
-|----------|---------|
-| `VOICE_RUNTIME=ultravox` | Default voice stack (Ultravox STT/LLM/TTS) |
-| `ULTRAVOX_API_KEY` | Required for voice calls & playground |
-| `USE_ULTRAVOX_RUNTIME=true` | Enable Ultravox path in orchestrator |
-| `GROQ_API_KEY` | LLM helpers (analytics, compliance, tools) |
-| `TWILIO_*` | Outbound/inbound telephony |
-| `SMTP_HOST`, `SMTP_FROM`, … | Real email from workflow nodes (else simulated) |
-| `TEMPORAL_HOST` | Durable **call** workflows (separate from in-app workflow engine) |
-| `POSTGRES_PORT=5435` | Match docker-compose external port |
-
-Full list: `backend/.env.example`.
+```
+┌───────────────────────────────────────────────────┐
+│                   Frontend (Next.js)               │
+│   Dashboard · Workflow Canvas · Campaigns · QA     │
+└──────────┬────────────────────────────────────────┘
+           │ HTTP / WebSocket
+┌──────────▼────────────────────────────────────────┐
+│               Backend API (FastAPI)                │
+│   Agents · Workflows · Campaigns · Telephony ·     │
+│   Memory · Knowledge · Tools · Billing · QA       │
+└──────┬──────────┬──────────┬──────────────────────┘
+       │          │          │
+       ▼          ▼          ▼
+┌──────────┐ ┌────────┐ ┌──────────┐
+│LiveKit   │ │Temporal│ │PostgreSQL│
+│Agent     │ │Workflow│ │+ pgvector│
+│(WebRTC)  │ │Engine  │ │+ Redis   │
+└──────────┘ └────────┘ └──────────┘
+       │
+       ▼
+┌──────────────────────────────────────┐
+│   STT · LLM · TTS Providers          │
+│   Google · Groq · Deepgram · Sarvam  │
+│   Qwen · OpenAI (extensible)         │
+└──────────────────────────────────────┘
+```
 
 ---
 
-## Workflow automation (shipped)
+## Configuration
 
-1. **Dashboard → Workflows** — create from template or blank, edit in **Visual** or **JSON**, **Publish**.
-2. **SAP ingest** tab — upload AR CSV → contacts + instances (published workflow required).
-3. **Campaigns → New** — attach a published workflow; **Start** runs one instance per pending contact.
-4. **Cron** — `POST /api/v1/workflows/process-due` resumes `wait` nodes.
+### Voice runtimes
 
-Details: [WORKFLOW_AUTOMATION.md](./WORKFLOW_AUTOMATION.md).
+| Runtime | Description |
+|---------|-------------|
+| `livekit` | Production WebRTC pipeline via LiveKit Agents (recommended) |
+| `custom` | Legacy WebSocket-based turn processor |
 
-**Phase 3:** Ultravox `call.ended` auto-advances workflow instances; Temporal worker runs due-instance scheduler; visual node config panel; campaign page shows per-contact workflow status.
+### STT / LLM / TTS providers
 
-```bash
-# Optional: Temporal worker (call workflows + workflow due scheduler)
-cd backend && python -m app.orchestration.worker
+Set via `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_VOICE` in `.env` or per-agent in the dashboard.
+
+| Provider | STT | TTS | LLM |
+|----------|-----|-----|-----|
+| Google Cloud | `latest_long` | `hi-IN-Wavenet-A` etc. | `gemini-2.5-flash` |
+| Groq | `whisper-large-v3-turbo` | `orpheus-v1-english` | `llama-3.3-70b-versatile` |
+| Deepgram | `nova-2` | deepgram voices | — |
+| Sarvam AI | `saaras:v3` | `bulbul:v2` (22 Indian langs) | — |
+
+### LiveKit Cloud
+
+Create an account at [livekit.cloud](https://livekit.cloud) and set:
+
+```env
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your-api-key
+LIVEKIT_API_SECRET=your-api-secret
+```
+
+### Telephony (Twilio)
+
+```env
+TWILIO_ACCOUNT_SID=ACxxxxxxxx
+TWILIO_AUTH_TOKEN=your-token
+TWILIO_PHONE_NUMBER=+15550001111
+```
+
+---
+
+## Project structure
+
+```
+├── frontend/              Next.js 16 + React 19 + Tailwind v4
+│   └── src/
+│       ├── app/           Dashboard pages (16 routes)
+│       ├── components/    Workflow canvas, shadcn/ui, charts
+│       └── hooks/         Voice session, API client
+├── backend/
+│   ├── app/
+│   │   ├── api/           FastAPI routers (22 modules)
+│   │   ├── core/          Config, security, tier gate
+│   │   ├── models/        SQLAlchemy models
+│   │   ├── schemas/       Pydantic schemas
+│   │   ├── services/      STT, TTS, knowledge, tools, etc.
+│   │   └── orchestration/ Agent loop, workflow engine, worker
+│   ├── livekit_agent.py   LiveKit agent entrypoint
+│   └── requirements.txt
+├── docker-compose.yml     Full platform stack
+├── .env.example           Configuration template
+└── README.md
 ```
 
 ---
@@ -118,21 +185,47 @@ cd backend && python -m app.orchestration.worker
 ## Development
 
 ```bash
-# Backend tests (workflow)
-cd backend && pytest tests/test_workflow_engine.py tests/test_sap_ingest.py -v
+# Backend
+cd backend
+python -m venv .venv && .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8001
 
-# Frontend production build
-cd frontend && npm run build
+# Frontend
+cd frontend
+npm install
+npm run dev
+
+# LiveKit agent (separate process)
+python backend/livekit_agent.py
+```
+
+```bash
+# Tests
+cd backend && pytest -v
 ```
 
 ---
 
-## Documentation
+## Roadmap
 
-See **[DOCS.md](./DOCS.md)** for the full index (architecture, PRD, features, voice pipeline, LLM knowledge doc).
+- [x] Visual workflow builder
+- [x] Multi-provider STT/TTS/LLM
+- [x] Campaigns + outbound dialing
+- [x] Knowledge base / RAG
+- [x] Multi-agent orchestration
+- [x] Compliance audit chain
+- [x] WhatsApp integration
+- [x] Billing / metering
+- [x] Hindi + Indian language support
+- [ ] Vonage / Plivo / Telnyx telephony providers
+- [ ] Python + TypeScript SDK packages
+- [ ] Pre-recorded audio nodes in workflows
+- [ ] Public docs site
+- [ ] Helm charts for K8s deployment
 
 ---
 
 ## License
 
-Proprietary. Not open source.
+MIT

@@ -15,6 +15,12 @@ def get_stt_provider() -> STTProvider:
         if provider == "deepgram":
             from app.services.stt.deepgram_provider import DeepgramSTT
             _stt_instance = DeepgramSTT()
+        elif provider == "sarvam":
+            from app.services.stt.sarvam_provider import SarvamSTT
+            _stt_instance = SarvamSTT()
+        elif provider == "google":
+            from app.services.stt.google_provider import GoogleSTT
+            _stt_instance = GoogleSTT()
         else:
             _stt_instance = MockSTT()
     return _stt_instance

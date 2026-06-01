@@ -14,8 +14,8 @@ from app.core.config import settings
 from app.models import agent as models
 from app.services.llm.groq_provider import GroqLLM
 from app.services.llm.enterprise_llm import EnterpriseLLM
-from app.services.tts.qwen_provider import QwenTTS
 from app.services.stt.factory import get_stt_provider
+from app.services.tts.factory import get_tts_provider
 from app.services.memory import get_memory_service
 from app.core.telemetry import get_tracer, persist_span, async_trace_span
 from app.orchestration.turn_metrics import TurnMetrics
@@ -42,7 +42,7 @@ from app.services.end_of_call_service import EndOfCallService
 
 # Instantiate default providers once
 stt_service = get_stt_provider()
-tts_service = QwenTTS()
+tts_service = get_tts_provider()
 
 # Model cost rates ($ per 1M input tokens)
 MODEL_COST_RATES: Dict[str, float] = {

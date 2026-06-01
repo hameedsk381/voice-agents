@@ -10,6 +10,10 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (pathname.startsWith("/api/v1")) {
+    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      return NextResponse.next();
+    }
+
     const url = new URL(pathname + search, backendUrl);
 
     const forwardHeaders = new Headers(request.headers);

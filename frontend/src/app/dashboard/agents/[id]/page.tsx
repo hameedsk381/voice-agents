@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { LANGUAGES, languageDisplay } from "@/lib/languages";
-import { useUltravoxSession } from "@/hooks/useUltravoxSession";
+import { useVoiceSession } from "@/hooks/useVoiceSession";
 import { PERSONALIZATION_FIELDS, personalizationToken } from "@/lib/product-copy";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ArrowLeft, Save, Play, Mic, Square, Trash2, Sliders, Activity, History, Shield, Globe, Volume2, Book, FileText, Plus, Search, Bot, Phone, PhoneOff, MicOff, CheckCircle, XCircle, AlertTriangle, Clock, DollarSign, BarChart3, RotateCcw, Tag, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
@@ -71,7 +71,7 @@ export default function AgentDetailPage() {
     const [selectedVoice, setSelectedVoice] = useState("auto");
     const [greeting, setGreeting] = useState("");
     // Playground — live voice test
-    const uvx = useUltravoxSession(
+    const vs = useVoiceSession(
         (params.id as string) || "",
         agent?.language,
         selectedVoice
@@ -311,8 +311,8 @@ export default function AgentDetailPage() {
 
     const sendMessage = (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (!input.trim() || !uvx.isCalling) return;
-        uvx.sendText(input);
+        if (!input.trim() || !vs.isCalling) return;
+        vs.sendText(input);
         setInput("");
     };
 
@@ -575,28 +575,31 @@ export default function AgentDetailPage() {
                             <Card className="flex-1 flex flex-col border-border bg-card overflow-hidden">
                                 <div className="p-4 border-b border-border flex items-center justify-between bg-muted/50">
                                     <div className="flex items-center gap-2">
-                                        <div className={`size-2 rounded-full ${uvx.isConnected ? "bg-green-500" : "bg-red-500"}`} />
+                                        <div className={`size-2 rounded-full ${vs.isConnected ? "bg-green-500" : "bg-red-500"}`} />
                                         <span className="text-sm font-medium text-gray-300">
-                                            {uvx.isConnected ? "Connected" : "Not connected"} · {uvx.isCalling ? "On call" : "Ready"}
+                                            {vs.isConnected ? "Connected" : "Not connected"} · {vs.isCalling ? "On call" : "Ready"}
                                         </span>
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">samvaad</span>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => (uvx.isCalling ? uvx.leaveCall() : uvx.startCall())}
-                                        className={`px-3 py-1.5 rounded text-xs font-medium border ${uvx.isCalling ? "border-red-500/20 text-red-400 hover:bg-red-500/10" : "border-green-500/20 text-green-400 hover:bg-green-500/10"}`}
-                                    >
-                                        {uvx.isCalling ? "End call" : "Start call"}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => (vs.isCalling ? vs.leaveCall() : vs.startCall())}
+                                            className={`px-3 py-1.5 rounded text-xs font-medium border ${vs.isCalling ? "border-red-500/20 text-red-400 hover:bg-red-500/10" : "border-green-500/20 text-green-400 hover:bg-green-500/10"}`}
+                                        >
+                                            {vs.isCalling ? "End call" : "Start call"}
+                                        </button>
+                                    </div>
                                 </div>
 
-                                {uvx.isCalling ? (
+                                {vs.isCalling ? (
                                     <div className="flex-1 flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500">
                                         <div className="relative">
-                                            <div className={`absolute -inset-4 bg-primary/20 rounded-full blur-xl transition-all duration-700 ${uvx.agentSpeaking ? 'scale-150 opacity-100' : 'scale-100 opacity-50'}`} />
-                                            <div className={`relative size-32 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${uvx.agentSpeaking ? 'border-primary bg-primary/10 shadow-[0_0_30px_rgba(11,116,176,0.5)]' : 'border-border bg-muted'}`}>
-                                                <Bot className={`size-16 transition-all duration-300 ${uvx.agentSpeaking ? 'text-primary scale-110' : 'text-muted-foreground'}`} />
+                                            <div className={`absolute -inset-4 bg-primary/20 rounded-full blur-xl transition-all duration-700 ${vs.agentSpeaking ? 'scale-150 opacity-100' : 'scale-100 opacity-50'}`} />
+                                            <div className={`relative size-32 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${vs.agentSpeaking ? 'border-primary bg-primary/10 shadow-[0_0_30px_rgba(11,116,176,0.5)]' : 'border-border bg-muted'}`}>
+                                                <Bot className={`size-16 transition-all duration-300 ${vs.agentSpeaking ? 'text-primary scale-110' : 'text-muted-foreground'}`} />
                                             </div>
-                                            {uvx.agentSpeaking && (
+                                            {vs.agentSpeaking && (
                                                 <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                                                     {[1, 2, 3, 4, 5].map(i => (
                                                         <div key={i} className="w-1 bg-primary rounded-full animate-bounce" style={{ height: `${8 + (i % 3) * 6}px`, animationDelay: `${i * 0.1}s` }} />
@@ -605,27 +608,27 @@ export default function AgentDetailPage() {
                                             )}
                                         </div>
                                         <div className="text-center space-y-2">
-                                            <h3 className="text-xl font-semibold text-foreground">{uvx.agentSpeaking ? "Agent is speaking..." : "Listening..."}</h3>
+                                            <h3 className="text-xl font-semibold text-foreground">{vs.agentSpeaking ? "Agent is speaking..." : "Listening..."}</h3>
                                             <p className="text-sm text-muted-foreground">Live voice test</p>
                                         </div>
                                         <div className="flex gap-4">
-                                            <button type="button" aria-label={uvx.isMuted ? "Unmute microphone" : "Mute microphone"} onClick={uvx.toggleMute} className={`p-4 rounded-full border transition-all ${uvx.isMuted ? 'bg-red-500/10 border-red-500/50 text-red-500' : 'bg-muted border-border text-muted-foreground hover:bg-muted'}`}>
-                                                {uvx.isMuted ? <MicOff className="size-6" /> : <Mic className="size-6" />}
+                                            <button type="button" aria-label={vs.isMuted ? "Unmute microphone" : "Mute microphone"} onClick={vs.toggleMute} className={`p-4 rounded-full border transition-all ${vs.isMuted ? 'bg-red-500/10 border-red-500/50 text-red-500' : 'bg-muted border-border text-muted-foreground hover:bg-muted'}`}>
+                                                {vs.isMuted ? <MicOff className="size-6" /> : <Mic className="size-6" />}
                                             </button>
-                                            <button type="button" aria-label="Leave call" onClick={uvx.leaveCall} className="p-4 rounded-full bg-red-600 text-white hover:bg-red-500 transition-all shadow-lg shadow-red-600/20">
+                                            <button type="button" aria-label="Leave call" onClick={vs.leaveCall} className="p-4 rounded-full bg-red-600 text-white hover:bg-red-500 transition-all shadow-lg shadow-red-600/20">
                                                 <PhoneOff className="size-6" />
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                        {uvx.chatHistory.length === 0 && (
+                                        {vs.chatHistory.length === 0 && (
                                             <div className="flex flex-col items-center justify-center h-full text-gray-600 space-y-2">
                                                 <Bot className="size-10 opacity-20" />
                                                 <p className="text-sm">Start the conversation to test the agent</p>
                                             </div>
                                         )}
-                                        {uvx.chatHistory.map((msg, i) => (
+                                        {vs.chatHistory.map((msg, i) => (
                                             <div key={`chat-${i}`} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                                 <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${msg.role === 'user'
                                                     ? 'bg-primary text-white'
@@ -645,11 +648,11 @@ export default function AgentDetailPage() {
                                         <div className="flex-1 h-px bg-muted" />
                                         <button
                                             type="button"
-                                            onClick={uvx.isCalling ? uvx.leaveCall : uvx.startCall}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all ${uvx.isCalling ? 'bg-red-600 text-white animate-pulse' : 'bg-green-600/10 text-green-400 border border-green-500/20 hover:bg-green-600/20'}`}
+                                            onClick={vs.isCalling ? vs.leaveCall : vs.startCall}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all ${vs.isCalling ? 'bg-red-600 text-white animate-pulse' : 'bg-green-600/10 text-green-400 border border-green-500/20 hover:bg-green-600/20'}`}
                                         >
-                                            {uvx.isCalling ? <PhoneOff className="size-4" /> : <Phone className="size-4" />}
-                                            {uvx.isCalling ? "End call" : "Start test call"}
+                                            {vs.isCalling ? <PhoneOff className="size-4" /> : <Phone className="size-4" />}
+                                            {vs.isCalling ? "End call" : "Start test call"}
                                         </button>
                                         <div className="flex-1 h-px bg-muted" />
                                     </div>
@@ -658,13 +661,13 @@ export default function AgentDetailPage() {
                                             value={input}
                                             onChange={e => setInput(e.target.value)}
                                             placeholder="Type a message..."
-                                            disabled={!uvx.isCalling}
+                                            disabled={!vs.isCalling}
                                             className="flex-1 bg-muted border border-border rounded-md px-4 py-2.5 text-foreground focus:outline-none focus:border-ring disabled:opacity-50"
                                         />
                                         <button
                                             type="submit"
                                             aria-label="Send message"
-                                            disabled={!uvx.isCalling}
+                                            disabled={!vs.isCalling}
                                             className="p-2.5 bg-primary text-white rounded-md hover:brightness-110 disabled:opacity-50 disabled:hover:bg-primary"
                                         >
                                             <Play className="size-5 fill-current" />
@@ -838,7 +841,7 @@ export default function AgentDetailPage() {
                                         </div>
                                         <div className="bg-card border border-border rounded-xl p-4">
                                             <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><DollarSign className="w-3.5 h-3.5" /> Total Cost</div>
-                                            <div className="font-display font-semibold text-2xl">${analytics.total_cost}</div>
+                                            <div className="font-display font-semibold text-2xl">₹{analytics.total_cost}</div>
                                         </div>
                                         <div className="bg-card border border-border rounded-xl p-4">
                                             <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><TrendingUp className="w-3.5 h-3.5" /> Success Rate</div>
@@ -932,7 +935,7 @@ export default function AgentDetailPage() {
                                                                     <td className="py-2.5 font-mono text-xs">{c.duration_seconds.toFixed(1)}s</td>
                                                                     <td className="py-2.5 font-mono text-xs">{c.avg_latency_ms.toFixed(0)}ms</td>
                                                                     <td className="py-2.5 font-mono text-xs">{c.total_turns}</td>
-                                                                    <td className="py-2.5 font-mono text-xs">${c.estimated_cost.toFixed(4)}</td>
+                                                                    <td className="py-2.5 font-mono text-xs">₹{c.estimated_cost.toFixed(4)}</td>
                                                                     <td className="py-2.5 text-xs text-muted-foreground">
                                                                         {c.start_time ? new Date(c.start_time).toLocaleString() : "-"}
                                                                     </td>

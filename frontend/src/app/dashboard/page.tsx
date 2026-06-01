@@ -92,7 +92,7 @@ export default function DashboardPage() {
     const kpiCards = [
         {
             title: "Cost per Call",
-            value: hasData ? `$${kpi.cost_per_call}` : "—",
+            value: hasData ? `₹${kpi.cost_per_call}` : "—",
             icon: DollarSign,
             color: { bg: "bg-primary/10", text: "text-primary" },
             sub: hasData ? `${kpi.total_calls} total calls` : "No calls yet"
@@ -336,7 +336,7 @@ export default function DashboardPage() {
                                             <td className="py-2 px-2 font-medium">{d.date}</td>
                                             <td className="py-2 px-2 text-right">{d.calls}</td>
                                             <td className="py-2 px-2 text-right font-mono">{d.total_minutes}</td>
-                                            <td className="py-2 px-2 text-right font-mono">${d.total_cost}</td>
+                                            <td className="py-2 px-2 text-right font-mono">₹{d.total_cost}</td>
                                             <td className="py-2 px-2 text-right font-mono">{d.avg_latency_ms} ms</td>
                                         </tr>
                                     ))}
