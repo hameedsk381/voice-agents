@@ -1,6 +1,6 @@
 # Voise AI
 
-**Open-source voice agent platform** — build, deploy, and monitor multilingual voice AI agents with drag-and-drop workflows, multi-provider STT/TTS/LLM, telephony integration, and enterprise-grade compliance.
+**Proprietary voice agent platform** — build, deploy, and monitor multilingual voice AI agents with drag-and-drop workflows, multi-provider STT/TTS/LLM, telephony integration, and enterprise-grade compliance.
 
 A self-hosted alternative to Vapi, Retell, and Dograh.
 
@@ -34,11 +34,12 @@ A self-hosted alternative to Vapi, Retell, and Dograh.
 
 - Docker & Docker Compose
 - API keys for your chosen providers (see Configuration)
+- Access to the private repository
 
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/hameedsk381/voice-agents.git
+git clone <your-repo-url>
 cd voice-agents
 cp backend/.env.example .env
 # Edit .env with your API keys
@@ -207,25 +208,6 @@ cd backend && pytest -v
 
 ---
 
-## Roadmap
-
-- [x] Visual workflow builder
-- [x] Multi-provider STT/TTS/LLM
-- [x] Campaigns + outbound dialing
-- [x] Knowledge base / RAG
-- [x] Multi-agent orchestration
-- [x] Compliance audit chain
-- [x] WhatsApp integration
-- [x] Billing / metering
-- [x] Hindi + Indian language support
-- [ ] Vonage / Plivo / Telnyx telephony providers
-- [ ] Python + TypeScript SDK packages
-- [ ] Pre-recorded audio nodes in workflows
-- [ ] Public docs site
-- [ ] Helm charts for K8s deployment
-
----
-
 ## License
 
-MIT
+Proprietary. All rights reserved.
