@@ -74,10 +74,18 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
 
-    # Telephony
+    # Telephony — multi-provider
+    TELEPHONY_PROVIDER: str = "twilio"  # twilio | vonage | plivo | telnyx
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
+    VONAGE_API_KEY: Optional[str] = None
+    VONAGE_API_SECRET: Optional[str] = None
+    VONAGE_APPLICATION_ID: Optional[str] = None
+    VONAGE_PRIVATE_KEY: Optional[str] = None
+    PLIVO_AUTH_ID: Optional[str] = None
+    PLIVO_AUTH_TOKEN: Optional[str] = None
+    TELNYX_API_KEY: Optional[str] = None
     SERVER_HOST: str = "localhost:8001"
 
     # WhatsApp

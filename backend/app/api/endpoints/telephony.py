@@ -1,15 +1,14 @@
 """
-Telephony endpoints for Twilio inbound/outbound voice.
-Ultravox Twilio medium removed — Samvaad Twilio integration TBD.
+Telephony endpoints — multi-provider inbound/outbound.
+Supports Twilio, Vonage, Plivo, Telnyx media streaming.
 """
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketState
-from twilio.twiml.voice_response import VoiceResponse
 from loguru import logger
 
 from app.orchestration.tool_executor import execute_tool
@@ -19,6 +18,7 @@ from app.models import agent as models
 from app.orchestration.session_manager import session_manager
 from app.services.monitoring_service import monitoring_service
 from app.services.telephony_service import telephony_service
+from app.services.telephony.factory import get_telephony_provider
 from app.services.tools.registry import AVAILABLE_TOOLS
 
 import json
@@ -94,43 +94,70 @@ def _tool_json_schema_to_dynamic_parameters(schema: Dict[str, Any]) -> List[Dict
 
 @router.post("/incoming")
 async def incoming_call(request: Request, db: Session = Depends(database.get_db)):
-    """Twilio inbound voice webhook — routes to configured agent."""
-    form = await request.form()
-    caller_number = form.get("From", "unknown")
-    called_number = form.get("To", "unknown")
-    call_sid = form.get("CallSid", "unknown")
-
-    logger.info(f"Inbound call from {caller_number} to {called_number} (SID: {call_sid})")
+    """Inbound voice webhook — routes to configured agent (Twilio, Vonage, Plivo)."""
+    provider = get_telephony_provider()
 
     agent = db.query(models.Agent).filter(models.Agent.is_active == True).first()
     if not agent:
         logger.warning("No active agent found for inbound call")
-        resp = VoiceResponse()
-        resp.say("No active agent is configured. Goodbye.", voice="Polly.Joanna")
-        resp.hangup()
-        return Response(content=str(resp), media_type="application/xml")
+        return _hangup_response(provider, "No active agent is configured. Goodbye.")
 
-    twilio_client = telephony_service.get_twilio_client()
-    if not twilio_client:
-        logger.error("Twilio client not configured")
-        resp = VoiceResponse()
-        resp.say("Service is not available. Goodbye.", voice="Polly.Joanna")
-        resp.hangup()
-        return Response(content=str(resp), media_type="application/xml")
+    stream_url = f"{_ws_base_url()}/api/v1/telephony/stream/{agent.id}"
+    provider_name = (settings.TELEPHONY_PROVIDER or "twilio").lower()
 
     try:
-        stream_url = f"{_ws_base_url()}/api/v1/telephony/stream/{agent.id}"
-        resp = VoiceResponse()
-        start = resp.connect()
-        start.stream(url=stream_url)
-        resp.say("Connecting you to our AI assistant. Please wait.", voice="Polly.Joanna")
+        if provider_name == "twilio":
+            form = await request.form()
+            caller_number = form.get("From", "unknown")
+            called_number = form.get("To", "unknown")
+            call_sid = form.get("CallSid", "unknown")
+            logger.info(f"Twilio inbound call from {caller_number} to {called_number} (SID: {call_sid})")
 
-        logger.info(f"Inbound call {call_sid} → stream to agent {agent.id}")
-        return Response(content=str(resp), media_type="application/xml")
+            twilio_client = telephony_service.get_twilio_client()
+            if not twilio_client:
+                return _hangup_response(provider, "Service is not available. Goodbye.")
+
+            twiml = provider.generate_stream_twiml(
+                stream_url,
+                welcome_message="Connecting you to our AI assistant. Please wait.",
+            )
+            return Response(content=twiml, media_type="application/xml")
+
+        elif provider_name == "vonage":
+            body = await request.json()
+            logger.info(f"Vonage inbound call: {body.get('uuid')}")
+            ncco = provider.generate_stream_twiml(stream_url)
+            return JSONResponse(content=json.loads(ncco))
+
+        elif provider_name == "plivo":
+            form = await request.form()
+            logger.info(f"Plivo inbound call from {form.get('From', 'unknown')}")
+            plivo_xml = provider.generate_stream_twiml(
+                stream_url,
+                welcome_message="Connecting you to our AI assistant. Please wait.",
+            )
+            return Response(content=plivo_xml, media_type="application/xml")
+
+        else:
+            return _hangup_response(provider, "Provider not supported for inbound calls yet.")
+
     except Exception as exc:
         logger.error(f"Inbound call setup failed: {exc}")
+        return _hangup_response(provider, "An error occurred. Please try again later.")
+
+
+def _hangup_response(provider, message: str) -> Response:
+    provider_name = (settings.TELEPHONY_PROVIDER or "twilio").lower()
+    if provider_name == "vonage":
+        ncco = [{"action": "talk", "text": message}, {"action": "hangup"}]
+        return JSONResponse(content=ncco)
+    elif provider_name == "plivo":
+        xml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Speak>{message}</Speak><Hangup/></Response>'
+        return Response(content=xml, media_type="application/xml")
+    else:
+        from twilio.twiml.voice_response import VoiceResponse
         resp = VoiceResponse()
-        resp.say("An error occurred. Please try again later.", voice="Polly.Joanna")
+        resp.say(message, voice="Polly.Joanna")
         resp.hangup()
         return Response(content=str(resp), media_type="application/xml")
 
@@ -244,7 +271,7 @@ async def outgoing_call(
     request: Request,
     db: Session = Depends(database.get_db),
 ):
-    """Trigger an outbound call — legacy fallback path."""
+    """Trigger an outbound call via the configured telephony provider."""
     if request.headers.get("content-type", "").startswith("application/json"):
         body = await request.json()
     else:
@@ -253,7 +280,7 @@ async def outgoing_call(
 
     agent_id = body.get("agent_id")
     to_number = body.get("to") or body.get("called_number")
-    from_number = body.get("from") or os.getenv("TWILIO_PHONE_NUMBER")
+    from_number = body.get("from") or settings.TWILIO_PHONE_NUMBER or ""
 
     if not agent_id or not to_number:
         return Response(status_code=400, content="Missing agent_id or to number")
@@ -262,34 +289,35 @@ async def outgoing_call(
     if not agent:
         return Response(status_code=404, content="Agent not found")
 
-    twilio_client = telephony_service.get_twilio_client()
-    if not twilio_client:
-        return Response(status_code=500, content="Twilio not configured")
+    provider = get_telephony_provider()
+    webhook_url = f"{_https_base_url()}/api/v1/telephony/twiml?agent_id={agent_id}"
 
-    try:
-        stream_url = f"{_https_base_url()}/api/v1/telephony/stream/{agent_id}"
-        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Connect><Stream url="{stream_url}"/></Connect>
-</Response>"""
+    call_id = await provider.initiate_outbound_call(
+        to_number=to_number,
+        from_number=from_number,
+        webhook_url=webhook_url,
+    )
 
-        call = twilio_client.calls.create(
-            url=f"{_https_base_url()}/api/v1/telephony/twiml?agent_id={agent_id}",
-            to=to_number,
-            from_=from_number,
-        )
-        logger.info(f"Outbound call initiated: SID={call.sid}")
-        return {"status": "initiated", "call_sid": call.sid, "to": to_number}
-    except Exception as exc:
-        logger.error(f"Outbound call failed: {exc}")
-        return Response(status_code=500, content=str(exc))
+    if call_id:
+        logger.info(f"Outbound call initiated via {settings.TELEPHONY_PROVIDER}: ID={call_id}")
+        return {"status": "initiated", "call_id": call_id, "to": to_number, "provider": settings.TELEPHONY_PROVIDER}
+    else:
+        return Response(status_code=500, content="Call initiation failed — check provider credentials")
 
 
 @router.get("/twiml")
-async def twiml_redirect(agent_id: str = Query(...), request: Request = None):
-    """Return TwiML that points to the media stream."""
+async def twiml_redirect(
+    agent_id: str = Query(...),
+    format: str = Query(None),
+    request: Request = None,
+):
+    """Return provider-specific streaming instructions (TwiML / NCCO / XML)."""
     stream_url = f"{_ws_base_url()}/api/v1/telephony/stream/{agent_id}"
-    resp = VoiceResponse()
-    start = resp.connect()
-    start.stream(url=stream_url)
-    return Response(content=str(resp), media_type="application/xml")
+    provider = get_telephony_provider()
+
+    result = provider.generate_stream_twiml(stream_url)
+    provider_name = (settings.TELEPHONY_PROVIDER or "twilio").lower()
+
+    if provider_name == "vonage" or format == "ncco":
+        return JSONResponse(content=json.loads(result))
+    return Response(content=result, media_type="application/xml")

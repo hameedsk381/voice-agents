@@ -41,3 +41,7 @@ livekit-api>=1.0.0
 livekit-plugins-groq>=1.5.0
 livekit-plugins-silero>=1.5.0
 livekit-plugins-google>=1.5.0
+# Telephony providers
+vonage>=4.0.0
+plivo>=4.0.0
+telnyx>=2.0.0

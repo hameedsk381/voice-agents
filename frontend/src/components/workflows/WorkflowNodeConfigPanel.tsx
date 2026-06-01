@@ -193,6 +193,31 @@ export default function WorkflowNodeConfigPanel({ node, onUpdate, onClose }: Pro
         </>
       )}
 
+      {d.nodeType === 'recorded_audio' && (
+        <>
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Audio URL</span>
+            <input
+              type="text"
+              value={String(config.audio_url ?? '')}
+              onChange={(e) => setConfigField('audio_url', e.target.value)}
+              placeholder="https://example.com/audio.wav"
+              className="w-full glass-input px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Audio file path</span>
+            <input
+              type="text"
+              value={String(config.audio_file ?? '')}
+              onChange={(e) => setConfigField('audio_file', e.target.value)}
+              placeholder="/recordings/greeting.wav"
+              className="w-full glass-input px-2 py-1.5 text-sm"
+            />
+          </label>
+        </>
+      )}
+
       {d.nodeType === 'wait' && (
         <label className="block space-y-1">
           <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Minutes</span>

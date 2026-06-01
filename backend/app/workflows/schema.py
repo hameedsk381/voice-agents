@@ -15,6 +15,7 @@ class NodeType(str, Enum):
     START = "start"
     CONDITION = "condition"
     VOICE_CALL = "voice_call"
+    RECORDED_AUDIO = "recorded_audio"
     WAIT = "wait"
     EMAIL = "email"
     WHATSAPP = "whatsapp"

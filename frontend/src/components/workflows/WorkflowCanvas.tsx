@@ -91,7 +91,7 @@ export default function WorkflowCanvas({
       data: {
         label: NODE_TYPE_OPTIONS.find((o) => o.value === type)?.label || type,
         nodeType: type,
-        config: type === 'voice_call' ? { max_attempts: 3 } : type === 'wait' ? { minutes: 60 } : {},
+        config: type === 'voice_call' ? { max_attempts: 3 } : type === 'wait' ? { minutes: 60 } : type === 'recorded_audio' ? { audio_url: '', audio_file: '' } : {},
       },
     };
     const nextNodes = [...nodes, newNode];

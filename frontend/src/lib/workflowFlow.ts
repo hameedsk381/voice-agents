@@ -14,6 +14,7 @@ export type WorkflowNodeData = {
 const TYPE_COLORS: Record<string, string> = {
   condition: "#8B5CF6",
   voice_call: "#00D4AA",
+  recorded_audio: "#EC4899",
   wait: "#F59E0B",
   email: "#6366F1",
   whatsapp: "#22C55E",
@@ -149,6 +150,7 @@ export function flowToDefinition(
 export const NODE_TYPE_OPTIONS = [
   { value: "condition", label: "Condition" },
   { value: "voice_call", label: "Voice call" },
+  { value: "recorded_audio", label: "Recorded audio" },
   { value: "wait", label: "Wait" },
   { value: "email", label: "Email" },
   { value: "whatsapp", label: "WhatsApp" },

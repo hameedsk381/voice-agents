@@ -168,6 +168,26 @@ class WorkflowEngine:
                 context_patch=patch,
             )
 
+        if node.type == NodeType.RECORDED_AUDIO:
+            audio_url = node.config.get("audio_url", "")
+            audio_file = node.config.get("audio_file", "")
+            if not audio_url and not audio_file:
+                return StepResult(
+                    status="failed",
+                    message="No audio_url or audio_file configured",
+                    context_patch={"recorded_audio_error": "missing source"},
+                )
+            return StepResult(
+                status="continue",
+                next_node_id=node.next,
+                message=f"Play pre-recorded audio: {audio_url or audio_file}",
+                context_patch={
+                    "recorded_audio_url": audio_url,
+                    "recorded_audio_file": audio_file,
+                    "last_step": "recorded_audio",
+                },
+            )
+
         if node.type == NodeType.WAIT:
             minutes = int(node.config.get("minutes") or 60)
             wait_until = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat()

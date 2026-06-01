@@ -168,9 +168,9 @@ class CampaignService:
         from_number: Optional[str] = None,
         organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Place an outbound call for one campaign contact (Ultravox removed — stubbed)."""
-        from loguru import logger
-        logger.warning(f"place_call called for campaign {campaign_id} contact {contact_id} — Ultravox integration removed")
+        """Place an outbound call via the configured telephony provider."""
+        from app.services.telephony.factory import get_telephony_provider
+        from app.core.config import settings
 
         campaign = await self.get_campaign(campaign_id, organization_id=organization_id)
         if not campaign:
@@ -187,15 +187,43 @@ class CampaignService:
         if not contact:
             raise ValueError("Contact not found")
 
-        contact.status = ContactStatus.FAILED.value
-        contact.error_message = "Outbound calling unavailable — Ultravox removed"
-        self.db.commit()
+        provider = get_telephony_provider()
+        to_number = contact.phone_number
+        caller = from_number or settings.TWILIO_PHONE_NUMBER or ""
 
-        return {
-            "status": "failed",
-            "reason": "Outbound calling requires Ultravox integration which has been removed",
-            "contact_id": contact.id,
-        }
+        if not caller:
+            contact.status = ContactStatus.FAILED.value
+            contact.error_message = "No caller ID configured"
+            self.db.commit()
+            return {"status": "failed", "reason": "No caller ID configured", "contact_id": contact.id}
+
+        https_base = self._https_base_url()
+        webhook_url = f"{https_base}/api/v1/telephony/twiml?agent_id={campaign.agent_id}"
+
+        call_id = await provider.initiate_outbound_call(
+            to_number=to_number,
+            from_number=caller,
+            webhook_url=webhook_url,
+        )
+
+        if call_id:
+            contact.status = ContactStatus.QUEUED.value
+            contact.session_id = call_id
+            self.db.commit()
+            return {"status": "dialed", "session_id": call_id, "contact_id": contact.id}
+        else:
+            contact.status = ContactStatus.FAILED.value
+            contact.error_message = "Provider failed to place call"
+            self.db.commit()
+            return {"status": "failed", "reason": "Provider failed to place call", "contact_id": contact.id}
+
+    def _https_base_url(self) -> str:
+        host = (settings.SERVER_HOST or "localhost:8001").strip()
+        if host.startswith("http://") or host.startswith("https://"):
+            return host.rstrip("/")
+        if "localhost" in host or host.startswith("127.0.0.1"):
+            return f"http://{host.rstrip('/')}"
+        return f"https://{host.rstrip('/')}"
 
     async def update_contact_status(
         self, 
