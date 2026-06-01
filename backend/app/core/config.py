@@ -31,64 +31,48 @@ class Settings(BaseSettings):
                 return json.loads(raw)
             return [origin.strip() for origin in raw.split(",") if origin.strip()]
         return value
-    
-    # Simple defaults for dev
+
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_SERVER: str = "localhost"
-    POSTGRES_PORT: int = 5435  # Match docker-compose
+    POSTGRES_PORT: int = 5435
     POSTGRES_DB: str = "voise"
-    
+
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: Optional[str] = None
     MIN_PASSWORD_LENGTH: int = 8
-    
+
     TEMPORAL_HOST: str = "localhost:7233"
-    
-    # API Keys (optional)
+
+    # API Keys (optional — used by custom runtime)
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     DEEPGRAM_API_KEY: Optional[str] = None
-    STT_PROVIDER: Literal["mock", "deepgram"] = "mock"
+    STT_PROVIDER: Literal["mock", "deepgram", "sarvam", "google", "groq"] = "mock"
     DEFAULT_STT_CONFIDENCE: float = 0.85
     DEFAULT_STT_CONFIDENCE_FLOOR: float = 0.5
-    ULTRAVOX_API_KEY: Optional[str] = None
-    ULTRAVOX_BASE_URL: str = "https://api.ultravox.ai/api"
-    ULTRAVOX_MODEL: str = "fixie-ai/ultravox-70B"
-    ULTRAVOX_VOICE: str = "Mark"
-    # Voice runtime: ultravox (recommended) uses Ultravox for STT/LLM/TTS via client SDK or proxy.
-    VOICE_RUNTIME: Literal["ultravox", "custom"] = "ultravox"
-    USE_ULTRAVOX_RUNTIME: bool = True
-    # Browser apps should use ultravox-client (WebRTC). Server WebSocket proxy is for custom integrations only.
-    USE_ULTRAVOX_WEBSOCKET_PROXY: bool = False
-    ULTRAVOX_INPUT_SAMPLE_RATE: int = 48000
-    ULTRAVOX_OUTPUT_SAMPLE_RATE: int = 48000
-    ULTRAVOX_CLIENT_BUFFER_MS: int = 60
-    ULTRAVOX_CALLBACKS_ENABLED: bool = True
-    ULTRAVOX_CALLBACK_SECRET: Optional[str] = None
-    # Override full URL; default derived from SERVER_HOST at runtime
-    ULTRAVOX_CALL_ENDED_WEBHOOK_URL: Optional[str] = None
 
-    # Inactivity messages
-    ULTRAVOX_INACTIVITY_TIMEOUT_SECONDS: int = 120
-    ULTRAVOX_INACTIVITY_WARNING_MESSAGE: str = "Are you still there? I'm here if you need me."
-    ULTRAVOX_INACTIVITY_FINAL_MESSAGE: str = "I'll let you go now. Goodbye!"
+    # Voice runtime — "custom" uses the turn processor (Groq + pluggable STT/TTS).
+    VOICE_RUNTIME: Literal["custom", "livekit"] = "custom"
 
-    # Per-call defaults
-    ULTRAVOX_DEFAULT_JOIN_TIMEOUT: str = "60s"
-    ULTRAVOX_DEFAULT_MAX_DURATION: str = "3600s"
-    ULTRAVOX_DEFAULT_TEMPERATURE: float = 0.4
-    ULTRAVOX_DEFAULT_RECORDING_ENABLED: bool = True
+    # TTS provider: qwen, deepgram, sarvam
+    TTS_PROVIDER: Literal["qwen", "deepgram", "sarvam", "google", "groq"] = "sarvam"
 
-    # Shared secrets for signing outbound requests (comma-separated)
-    ULTRAVOX_SHARED_SECRETS: Optional[str] = None
+    # --- Sarvam AI API (STT / TTS) ---
+    SARVAM_API_KEY: Optional[str] = None
 
-    # Retention: "retain", "auto_delete", or "unspecified" (default: retain)
-    ULTRAVOX_RETENTION_POLICY: str = "CALL_RETENTION_POLICY_RETAIN"
-
-    # Throttles (0 = unlimited)
-    ULTRAVOX_MAX_CONCURRENT_CALLS: int = 0
+    # --- LiveKit voice runtime (Google full pipeline) ---
+    LIVEKIT_URL: Optional[str] = None
+    LIVEKIT_API_KEY: Optional[str] = None
+    LIVEKIT_API_SECRET: Optional[str] = None
+    LIVEKIT_AGENT_NAME: str = "voise-livekit-agent"
+    LIVEKIT_STT_MODEL: str = "latest_long"
+    LIVEKIT_STT_LANGUAGE: str = "hi-IN"
+    LIVEKIT_LLM_MODEL: str = "gemini-2.5-flash"
+    LIVEKIT_TTS_VOICE: str = "hi-IN-Wavenet-A"
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
+    GOOGLE_API_KEY: Optional[str] = None
 
     # Telephony
     TWILIO_ACCOUNT_SID: Optional[str] = None
@@ -99,7 +83,7 @@ class Settings(BaseSettings):
     # WhatsApp
     TWILIO_WHATSAPP_SENDER: str = "whatsapp:+919999999999"
     TWILIO_STATUS_CALLBACK_URL: Optional[str] = None
-    WHATSAPP_RATE_LIMIT_PER_HOUR: int = 0  # 0 = unlimited
+    WHATSAPP_RATE_LIMIT_PER_HOUR: int = 0
     WHATSAPP_OPTIN_REQUIRED: bool = True
     WHATSAPP_TEMPLATE_NAMESPACE: Optional[str] = None
 
@@ -112,7 +96,7 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
 
     # Observability
-    LOG_FORMAT: str = "text"  # "text" or "json"
+    LOG_FORMAT: str = "text"
     METRICS_ENABLED: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -127,11 +111,3 @@ def public_api_base() -> str:
     if "localhost" in host or host.startswith("127.0.0.1"):
         return f"http://{host.rstrip('/')}"
     return f"https://{host.rstrip('/')}"
-
-
-def ultravox_call_ended_webhook_url() -> Optional[str]:
-    if settings.ULTRAVOX_CALL_ENDED_WEBHOOK_URL:
-        return settings.ULTRAVOX_CALL_ENDED_WEBHOOK_URL
-    if not settings.ULTRAVOX_CALLBACKS_ENABLED:
-        return None
-    return f"{public_api_base()}{settings.API_V1_STR}/ultravox/webhooks/call-ended"

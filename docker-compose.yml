@@ -113,7 +113,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - ENVIRONMENT=prod
+      - ENVIRONMENT=dev
       - POSTGRES_SERVER=postgres
       - POSTGRES_PORT=5432
       - REDIS_HOST=redis
@@ -121,9 +121,19 @@ services:
       - TEMPORAL_HOST=temporal:7233
       - SECRET_KEY=voice_agents_prod_secret_key_2026
       - GROQ_API_KEY=${GROQ_API_KEY:-placeholder}
-      - ULTRAVOX_API_KEY=${ULTRAVOX_API_KEY:-placeholder}
-      - ULTRAVOX_DEFAULT_RECORDING_ENABLED=false
-      - ULTRAVOX_RETENTION_POLICY=""
+      - VOICE_RUNTIME=${VOICE_RUNTIME:-livekit}
+      - STT_PROVIDER=${STT_PROVIDER:-groq}
+      - TTS_PROVIDER=${TTS_PROVIDER:-groq}
+      - LIVEKIT_URL=${LIVEKIT_URL:-}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      - LIVEKIT_AGENT_NAME=${LIVEKIT_AGENT_NAME:-voise-livekit-agent}
+      - LIVEKIT_STT_MODEL=${LIVEKIT_STT_MODEL:-whisper-large-v3-turbo}
+      - LIVEKIT_STT_MODEL=${LIVEKIT_STT_MODEL:-latest_long}
+      - LIVEKIT_STT_LANGUAGE=${LIVEKIT_STT_LANGUAGE:-hi-IN}
+      - LIVEKIT_LLM_MODEL=${LIVEKIT_LLM_MODEL:-gemini-2.5-flash}
+      - LIVEKIT_TTS_VOICE=${LIVEKIT_TTS_VOICE:-hi-IN-Wavenet-A}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - LOG_FORMAT=json
       - METRICS_ENABLED=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
@@ -132,6 +142,30 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - voise-network
+
+  livekit-agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voise-livekit-agent
+    command: ["python", "livekit_agent.py"]
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY:-placeholder}
+      - LIVEKIT_URL=${LIVEKIT_URL:-}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      - LIVEKIT_AGENT_NAME=${LIVEKIT_AGENT_NAME:-voise-livekit-agent}
+      - LIVEKIT_STT_MODEL=${LIVEKIT_STT_MODEL:-whisper-large-v3-turbo}
+      - LIVEKIT_STT_MODEL=${LIVEKIT_STT_MODEL:-latest_long}
+      - LIVEKIT_STT_LANGUAGE=${LIVEKIT_STT_LANGUAGE:-hi-IN}
+      - LIVEKIT_LLM_MODEL=${LIVEKIT_LLM_MODEL:-gemini-2.5-flash}
+      - LIVEKIT_TTS_VOICE=${LIVEKIT_TTS_VOICE:-hi-IN-Wavenet-A}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - LOG_FORMAT=json
+    # No infra dependencies — connects directly to LiveKit Cloud + Google Cloud
     networks:
       - voise-network
 
