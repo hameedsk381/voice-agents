@@ -126,6 +126,11 @@ class _WorkflowsResource:
         r.raise_for_status()
         return r.json()
 
+    def trigger(self, workflow_id: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        r = self._http.post(f"/api/v1/workflows/trigger/{workflow_id}", json=context or {})
+        r.raise_for_status()
+        return r.json()
+
 
 class _KnowledgeResource:
     def __init__(self, http: httpx.Client) -> None:

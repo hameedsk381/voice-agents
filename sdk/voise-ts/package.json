@@ -1,0 +1,20 @@
+{
+  "name": "voise",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Voise AI voice agent platform API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hameedsk381/voice-agents"
+  },
+  "keywords": ["voise", "voice", "ai", "agent"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
