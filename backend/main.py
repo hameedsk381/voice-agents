@@ -203,6 +203,45 @@ async def startup_event():
     _background_tasks.append(task)
     logger.info("Memory TTL cleanup background task started (interval: 5 min)")
 
+    async def _stale_call_sweeper_loop():
+        while True:
+            try:
+                await asyncio.sleep(300) # Run every 5 minutes
+                from app.core.database import SessionLocal
+                from app.models.campaign import CampaignContact, ContactStatus
+                from datetime import datetime, timedelta
+                
+                db = SessionLocal()
+                try:
+                    cutoff = datetime.utcnow() - timedelta(minutes=15)
+                    stuck_contacts = db.query(CampaignContact).filter(
+                        CampaignContact.status == ContactStatus.IN_PROGRESS.value,
+                        CampaignContact.updated_at < cutoff
+                    ).all()
+                    
+                    for c in stuck_contacts:
+                        c.status = ContactStatus.FAILED.value
+                        c.error_message = "Task crashed or timed out (Zombie Sweeper)"
+                    
+                    if stuck_contacts:
+                        db.commit()
+                        logger.warning(f"Zombie sweeper recovered {len(stuck_contacts)} stuck calls")
+                finally:
+                    db.close()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Zombie sweeper error: {e}")
+
+    sweeper_task = asyncio.create_task(_stale_call_sweeper_loop())
+    _background_tasks.append(sweeper_task)
+    logger.info("Zombie call sweeper started")
+
+    from app.services.dialer import dialer_loop
+    dialer_task = asyncio.create_task(dialer_loop())
+    _background_tasks.append(dialer_task)
+    logger.info("Outbound dialer loop background task started")
+
 # CORS: explicit origins + local dev regex (LAN IP, alternate ports)
 _cors_origins = list(settings.BACKEND_CORS_ORIGINS)
 _cors_origin_regex = None

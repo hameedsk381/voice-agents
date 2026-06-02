@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 from typing import Optional, List, Dict, Any
-from app.services.tts.qwen_provider import QwenTTS
+from app.services.tts.elevenlabs_provider import ElevenLabsTTS
 from app.services.ultravox_service import UltravoxService
 from app.core.config import settings
 import shutil
@@ -10,7 +10,7 @@ import base64
 from loguru import logger
 
 router = APIRouter()
-tts_service = QwenTTS() # Default: http://127.0.0.1:8008
+tts_service = ElevenLabsTTS()
 ultravox_service = UltravoxService()
 
 
@@ -27,7 +27,8 @@ async def list_voices(primaryLanguage: Optional[str] = None):
             return await ultravox_service.list_voices(primaryLanguage=primaryLanguage)
         except Exception as e:
             logger.error(f"Ultravox list voices failed: {e}")
-            raise HTTPException(status_code=502, detail="Failed to fetch voices from Ultravox")
+            # Fallback to ElevenLabs if Ultravox fails
+            pass
 
     voices = await tts_service.get_voices()
     return voices
@@ -88,7 +89,7 @@ async def register_voice(
              detail = (
                  "Failed to register voice via Ultravox."
                  if _use_ultravox_voice_stack()
-                 else "Failed to register voice. Ensure QwenTTS server is running."
+                 else "Failed to register voice. Ensure ElevenLabs API is reachable."
              )
              raise HTTPException(status_code=500, detail=detail)
              

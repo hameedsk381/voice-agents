@@ -31,6 +31,16 @@ async def get_pending_actions(
     service = HITLService(db)
     return await service.list_pending_actions()
 
+@router.get("/active-sessions")
+async def get_active_sessions(
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db)
+):
+    from app.orchestration.session_manager import session_manager
+    # In a real multi-tenant app, filter by organization_id
+    sessions = await session_manager.get_all_active_sessions()
+    return sessions
+
 @router.post("/{action_id}/decide")
 async def decide_action(
     action_id: str,

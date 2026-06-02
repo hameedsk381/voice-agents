@@ -194,7 +194,8 @@ AVAILABLE NODE TYPES:
 - webhook: HTTP call to external API. Config: {"url":"https://...","method":"POST","headers":{},"body_template":"...","response_key":"webhook_resp"}. Supports {{var}} templating. Uses next edge.
 - db_query: SQL query against internal DB. Config: {"query":"SELECT * FROM...","result_key":"result"}. Parameters via :param_name from context. Uses next edge.
 - hitl_approval: Human approval. Config: {"action_type":"...","description":"..."}. Uses next edge.
-- escalate: Escalate. Config: {"owner_role":"branch_owner|relationship_manager|legal","priority":"low|medium|high"}. Uses next edge.
+- escalate: Escalate. Config: {"owner_role":"branch_owner|relationship_manager|legal","priority":"low|medium|high","routing_number":"+91..."}. Uses next edge.
+- qa_node: QA Check. Config: {"rubric":"...","expected_outcome":"yes","evaluator_model":"llama-3.3-70b-versatile"}. Routes to on_true / on_false based on outcome.
 - agent_task: Route to another AI agent. Config: {"capability":"...","input":"..."}. Uses next edge.
 - fork: Parallel branches. Config: {"branches":["branch1_id","branch2_id"]}. Branches converge at a join node. Uses next edge (join point).
 - join: Merge point for fork branches. Uses next edge (continues after all branches complete).

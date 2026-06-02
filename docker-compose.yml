@@ -19,6 +19,20 @@ services:
     networks:
       - voise-network
 
+  # --- LiveKit WebRTC Server ---
+  livekit-server:
+    image: livekit/livekit-server:latest
+    container_name: voise-livekit
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880" # HTTP API
+      - "7881:7881" # WebRTC signal
+      - "7882:7882/udp" # WebRTC UDP
+    environment:
+      - LIVEKIT_KEYS=devkey:secret
+    networks:
+      - voise-network
+
   redis:
     image: redis:7
     container_name: voise-redis
@@ -127,6 +141,11 @@ services:
       - LOG_FORMAT=json
       - METRICS_ENABLED=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - LIVEKIT_URL=ws://livekit-server:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-placeholder}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-placeholder}
     depends_on:
       postgres:
         condition: service_healthy

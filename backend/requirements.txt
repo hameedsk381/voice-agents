@@ -35,3 +35,6 @@ python-multipart>=0.0.9
 twilio>=9.0.0
 email-validator>=2.1.0
 pyyaml>=6.0.1
+pipecat-ai[livekit,deepgram,elevenlabs]>=0.0.42
+livekit-api>=0.4.0
+livekit-server-sdk>=0.6.0

@@ -24,7 +24,7 @@ class DeferredMessage(BaseModel):
     medium: str = "sms"
 
 
-class UltravoxJoinRequest(BaseModel):
+class LiveKitJoinRequest(BaseModel):
     language: Optional[str] = None
     voice: Optional[str] = None
     caller_id: Optional[str] = None
@@ -39,8 +39,9 @@ class UltravoxJoinRequest(BaseModel):
     prior_call_id: Optional[str] = None
 
 
-class UltravoxJoinResponse(BaseModel):
-    join_url: str
+class LiveKitJoinResponse(BaseModel):
+    room_name: str
+    participant_token: str
     call_id: str
     session_id: str
     agent_id: str
@@ -48,7 +49,6 @@ class UltravoxJoinResponse(BaseModel):
     voice: str
     language: str
     tool_names: List[str] = []
-    ultravox_agent_id: Optional[str] = None
 
 
 class ChatRequest(BaseModel):

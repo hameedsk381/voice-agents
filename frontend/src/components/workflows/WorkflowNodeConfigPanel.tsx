@@ -445,6 +445,15 @@ export default function WorkflowNodeConfigPanel({ node, onUpdate, onClose }: Pro
             />
           </label>
           <label className="block space-y-1">
+            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Routing Phone Number</span>
+            <input
+              value={String(config.routing_number ?? '')}
+              onChange={(e) => setConfigField('routing_number', e.target.value)}
+              placeholder="+1234567890"
+              className="w-full glass-input px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="block space-y-1">
             <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Priority</span>
             <select
               value={String(config.priority ?? 'medium')}
@@ -468,6 +477,44 @@ export default function WorkflowNodeConfigPanel({ node, onUpdate, onClose }: Pro
             className="w-full glass-input px-2 py-1.5 text-sm"
           />
         </label>
+      )}
+
+      {d.nodeType === 'qa_node' && (
+        <>
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">LLM Evaluator Model</span>
+            <select
+              value={String(config.evaluator_model ?? 'llama-3.3-70b-versatile')}
+              onChange={(e) => setConfigField('evaluator_model', e.target.value)}
+              className="w-full glass-input px-2 py-1.5 text-sm"
+            >
+              <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Groq)</option>
+              <option value="llama-3.1-8b-instant">Llama 3.1 8B (Groq)</option>
+            </select>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Evaluation Rubric (Prompt)</span>
+            <textarea
+              rows={4}
+              value={String(config.rubric ?? '')}
+              onChange={(e) => setConfigField('rubric', e.target.value)}
+              placeholder="e.g. Did the agent successfully collect the user's email? Answer yes or no."
+              className="w-full glass-input px-2 py-1.5 text-xs"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[10px] font-semibold text-[var(--text-secondary)]">Expected Outcome</span>
+            <input
+              value={String(config.expected_outcome ?? 'yes')}
+              onChange={(e) => setConfigField('expected_outcome', e.target.value)}
+              placeholder="yes"
+              className="w-full glass-input px-2 py-1.5 text-sm"
+            />
+          </label>
+          <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
+            Uses LLM to evaluate the prompt. Routes to <strong className="text-[var(--status-success)]">yes</strong> edge if it matches expected outcome, <strong className="text-[var(--status-error)]">no</strong> otherwise.
+          </p>
+        </>
       )}
 
       {d.nodeType === 'condition' && (

@@ -25,6 +25,7 @@ const TYPE_COLORS: Record<string, string> = {
   agent_task: "#14B8A6",
   fork: "#8B5CF6",
   join: "#8B5CF6",
+  qa_node: "#FACC15",
   end: "#52526B",
 };
 
@@ -160,5 +161,6 @@ export const NODE_TYPE_OPTIONS = [
   { value: "agent_task", label: "Agent task" },
   { value: "fork", label: "Fork" },
   { value: "join", label: "Join" },
+  { value: "qa_node", label: "QA Check" },
   { value: "end", label: "End" },
 ];

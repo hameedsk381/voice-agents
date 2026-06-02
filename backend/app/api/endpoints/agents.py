@@ -23,6 +23,7 @@ from app.services.ultravox_agent_sync import (
     delete_ultravox_agent_for_voise_agent,
     sync_agent_to_ultravox,
 )
+from app.services.llm.groq_provider import GroqLLM
 
 router = APIRouter()
 
@@ -73,6 +74,40 @@ async def create_agent(
     db.refresh(db_agent)
     await _persist_ultravox_sync(db_agent, db)
     return db_agent
+
+
+@router.post("/quickstart", response_model=schemas.Agent)
+async def quickstart_agent(
+    req: schemas.AgentQuickstartRequest,
+    db: Session = Depends(database.get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """Rapidly provision an agent with an LLM-generated persona for the onboarding flow."""
+    llm = GroqLLM()
+    sys_prompt = (
+        "You are an expert prompt engineer for voice AI agents. "
+        "The user will describe a use case. Write a detailed system prompt/persona for the voice agent. "
+        "Return ONLY the final system prompt with no conversational filler."
+    )
+    generated_persona = await llm.generate_response(req.description, sys_prompt, [])
+    
+    db_agent = models.Agent(
+        id=str(uuid.uuid4()),
+        name=req.name,
+        role="Voice Assistant",
+        description=req.description,
+        persona=generated_persona.strip(),
+        language="en-IN",
+        is_active=True,
+        organization_id=current_user.organization_id,
+        config={}
+    )
+    db.add(db_agent)
+    db.commit()
+    db.refresh(db_agent)
+    await _persist_ultravox_sync(db_agent, db)
+    return db_agent
+
 
 
 @router.get("/", response_model=List[schemas.Agent])

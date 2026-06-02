@@ -157,12 +157,20 @@ class AnalyticsService:
         successful_calls = self.db.query(func.count(CallLog.id)).filter(CallLog.outcome == "SUCCESS").scalar()
         success_rate = (successful_calls / total_calls * 100) if total_calls > 0 else 0
         
+        from app.orchestration.session_manager import session_manager
+        active_sessions = 0
+        try:
+            active_sessions = len(await session_manager.get_all_active_sessions())
+        except Exception:
+            pass
+
         return {
             "total_calls": total_calls,
             "total_minutes": round(total_duration / 60, 2),
             "avg_latency_ms": round(avg_latency, 2),
             "total_cost": round(total_cost, 4),
-            "success_rate": round(success_rate, 1)
+            "success_rate": round(success_rate, 1),
+            "realtime_active_sessions": active_sessions
         }
 
     async def get_calls_over_time(self, days: int = 7) -> List[Dict[str, Any]]:

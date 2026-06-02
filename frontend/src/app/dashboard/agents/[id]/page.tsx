@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { LANGUAGES, languageDisplay } from "@/lib/languages";
-import { useUltravoxSession } from "@/hooks/useUltravoxSession";
+import { useLiveKitSession } from "@/hooks/useLiveKitSession";
 import { PERSONALIZATION_FIELDS, personalizationToken } from "@/lib/product-copy";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ArrowLeft, Save, Play, Mic, Square, Trash2, Sliders, Activity, History, Shield, Globe, Volume2, Book, FileText, Plus, Search, Bot, Phone, PhoneOff, MicOff, CheckCircle, XCircle, AlertTriangle, Clock, DollarSign, BarChart3, RotateCcw, Tag, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
@@ -71,7 +71,7 @@ export default function AgentDetailPage() {
     const [selectedVoice, setSelectedVoice] = useState("auto");
     const [greeting, setGreeting] = useState("");
     // Playground — live voice test
-    const uvx = useUltravoxSession(
+    const uvx = useLiveKitSession(
         (params.id as string) || "",
         agent?.language,
         selectedVoice
