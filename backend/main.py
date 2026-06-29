@@ -47,13 +47,11 @@ except Exception as e:
 
 @app.on_event("startup")
 async def startup_event():
-    # Verify JWT Secret key is not default in production
+    # Production preflight: aborts boot in prod on placeholder secrets,
+    # missing voice/reasoning keys, unreachable webhook host, etc.
     from loguru import logger
-    if settings.ENVIRONMENT == "prod" and settings.SECRET_KEY == "your-super-secret-key-change-in-production":
-        logger.critical("SECURITY WARNING: Using default development SECRET_KEY in production! System startup halted.")
-        raise ValueError("Cannot run in production environment with default development SECRET_KEY!")
-    elif settings.SECRET_KEY == "your-super-secret-key-change-in-production":
-        logger.warning("SECURITY WARNING: Using default development SECRET_KEY. Change this in production!")
+    from app.core.preflight import run_preflight
+    run_preflight()
 
     # Auto-create tables for development (trace_logs, eval_runs, policy_rules, etc.)
     try:
@@ -228,8 +226,53 @@ app.add_middleware(
 
 @app.get("/health")
 def health_check():
+    """Liveness: the process is up. Used by the container HEALTHCHECK."""
     return {"status": "ok", "service": "Voise AI"}
-    
+
+
+@app.get("/health/ready")
+def readiness_check():
+    """Readiness: dependencies (Postgres, Redis) are reachable.
+
+    Returns 503 when a dependency is down so load balancers / orchestrators
+    stop routing traffic to this instance instead of failing live calls.
+    """
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+
+    checks: dict[str, str] = {}
+    ok = True
+
+    # Postgres
+    try:
+        from app.core.database import engine
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["postgres"] = "ok"
+    except Exception as e:
+        checks["postgres"] = f"error: {type(e).__name__}"
+        ok = False
+
+    # Redis
+    try:
+        import redis
+        r = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            password=settings.REDIS_PASSWORD,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        r.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {type(e).__name__}"
+        ok = False
+
+    body = {"status": "ready" if ok else "not_ready", "checks": checks}
+    return JSONResponse(body, status_code=200 if ok else 503)
+
+
 @app.get("/")
 def root():
     return {"message": "Welcome to Voise AI API"}

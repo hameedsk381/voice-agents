@@ -6,8 +6,10 @@ borrower can pay an overdue EMI mid-call. The link carries `notes` that tie
 the payment back to the originating call (session_id / call_log_id), so the
 Razorpay webhook can record a `payment_collected` outcome.
 
-Gracefully degrades to a mock link when keys or the SDK are unavailable
-(mirrors the mock behaviour of SmsService / PhoneNumberService).
+When keys or the SDK are unavailable the service fails loudly
+(status="failed", error="razorpay_not_configured") rather than returning
+a fake link — a missing payment link must never look real to the borrower
+or the billing pipeline.
 """
 
 from typing import Any, Dict, Optional
