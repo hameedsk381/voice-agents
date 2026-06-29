@@ -152,10 +152,12 @@ def test_build_call_callbacks_when_enabled():
 
 def test_verify_ultravox_webhook_signature():
     import hmac
+    from datetime import datetime, timezone
 
     secret = "test-secret"
     body = b'{"event":"call.ended","call":{"callId":"c1"}}'
-    timestamp = "2026-05-21T12:00:00+00:00"
+    # Use a current timestamp so the 5-minute freshness check always passes.
+    timestamp = datetime.now(timezone.utc).isoformat()
     expected = hmac.new(secret.encode(), body + timestamp.encode(), "sha256").hexdigest()
 
     request = MagicMock()
