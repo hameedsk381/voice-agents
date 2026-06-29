@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
+
 from app.models import agent as models
 from app.services.tools.registry import AVAILABLE_TOOLS
 from app.core.config import settings, ultravox_call_ended_webhook_url
@@ -142,7 +144,12 @@ def build_system_prompt(
     """
     persona = active_persona or agent.persona
     label = "{{language}}" if use_template_variables else _language_label(language)
-    return f"{persona}\n\nIMPORTANT: Respond only in {label}."
+    base = f"{persona}\n\nIMPORTANT: Respond only in {label}."
+    if use_template_variables:
+        # Per-call caller memory is substituted from templateContext at call time.
+        # Empty for new callers (resolves to "").
+        base += "\n\n{{callerContext}}"
+    return base
 
 
 def get_ultravox_agent_id(config: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -319,16 +326,53 @@ def build_first_speaker_override(greeting: Optional[str]) -> Optional[Dict[str, 
     return {"firstSpeakerSettings": {"agent": {"text": str(greeting)}}}
 
 
+# Localized AI-disclosure (TRAI/TCCCPR — synthetic-voice disclosure at call open).
+# Keyed by the primary language subtag of agent.language (e.g. "hi" from "hi-IN").
+_DISCLOSURE_TRANSLATIONS: Dict[str, str] = {
+    "hi": "नमस्ते, मैं {company} की ओर से बात करने वाली एक एआई सहायक हूँ।",
+    "ta": "வணக்கம், நான் {company} சார்பாக அழைக்கும் ஒரு AI உதவியாளர்.",
+    "te": "నమస్తే, నేను {company} తరఫున మాట్లాడుతున్న AI సహాయకురాలిని.",
+    "bn": "নমস্কার, আমি {company}-এর পক্ষ থেকে কথা বলা একজন এআই সহকারী।",
+    "mr": "नमस्कार, मी {company} च्या वतीने बोलणारी एक एआय सहाय्यक आहे.",
+    "gu": "નમસ્તે, હું {company} વતી વાત કરતી એક AI સહાયક છું.",
+    "kn": "ನಮಸ್ಕಾರ, ನಾನು {company} ಪರವಾಗಿ ಮಾತನಾಡುವ AI ಸಹಾಯಕಿ.",
+}
+
+
+def build_ai_disclosure(agent: models.Agent) -> Optional[str]:
+    """Mandatory synthetic-voice disclosure, localized to the agent's language.
+
+    Returns None when disclosure is disabled via settings.AI_DISCLOSURE_REQUIRED.
+    """
+    if not settings.AI_DISCLOSURE_REQUIRED:
+        return None
+    company = (agent.config or {}).get("company_name") or "Voise AI"
+    lang = (agent.language or "en-US").split("-")[0].lower()
+    template = _DISCLOSURE_TRANSLATIONS.get(lang, settings.AI_DISCLOSURE_TEMPLATE)
+    return template.format(company=company)
+
+
 def resolve_call_greeting(
     agent: models.Agent,
     *,
     campaign_call_config: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
-    """Campaign greeting wins over agent default."""
+    """Campaign greeting wins over agent default; mandatory AI-disclosure is prepended."""
     if campaign_call_config and campaign_call_config.get("greeting"):
-        return str(campaign_call_config["greeting"])
-    agent_greeting = (agent.config or {}).get("greeting")
-    return str(agent_greeting) if agent_greeting else None
+        greeting: Optional[str] = str(campaign_call_config["greeting"])
+    else:
+        agent_greeting = (agent.config or {}).get("greeting")
+        greeting = str(agent_greeting) if agent_greeting else None
+
+    disclosure = build_ai_disclosure(agent)
+    if not disclosure:
+        return greeting
+    if not greeting:
+        return disclosure
+    # Avoid double-disclosing if the configured greeting already contains it.
+    if disclosure.rstrip(".।") in greeting:
+        return greeting
+    return f"{disclosure} {greeting}"
 
 
 def build_call_callbacks() -> Optional[Dict[str, Any]]:
@@ -542,10 +586,44 @@ def build_template_context(
         "customerName": customer_name or caller_id or "there",
         "language": _language_label(language or agent.language or "en-US"),
         "role": agent.role or "assistant",
+        # Always present so the {{callerContext}} placeholder never leaks literally.
+        "callerContext": "",
     }
     if extra:
         ctx.update({k: v for k, v in extra.items() if v is not None})
     return {k: str(v) for k, v in ctx.items()}
+
+
+async def build_caller_memory_context(
+    db,
+    caller_id: Optional[str],
+    *,
+    organization_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+) -> str:
+    """Per-call caller memory for the {{callerContext}} prompt placeholder.
+
+    Returns a compact context block (returning-caller profile, prior summaries,
+    remembered facts) or "" when unavailable. Best-effort: never raises.
+    """
+    if not caller_id:
+        return ""
+    try:
+        from app.services.memory import get_memory_service
+
+        memory_service = get_memory_service(db)
+        context = await memory_service.get_context_for_call(
+            caller_id, organization_id=organization_id, agent_id=agent_id
+        )
+        if context and context.strip():
+            return (
+                "## What you already know about this caller\n"
+                f"{context.strip()}\n"
+                "Use this to personalise the call. Do not read it aloud verbatim."
+            )
+    except Exception as exc:
+        logger.warning(f"Caller memory load failed for {caller_id}: {exc}")
+    return ""
 
 
 def build_twilio_call_overrides(

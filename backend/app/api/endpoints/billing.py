@@ -41,9 +41,15 @@ async def get_usage(
     current_user: User = Depends(get_current_user_required),
     db: Session = Depends(database.get_db),
 ):
-    """Get current billing period usage summary and limits."""
+    """Get current billing period usage summary, limits, and outcome billing."""
     svc = UsageService(db)
-    return svc.get_usage_and_limits(current_user.organization_id)
+    result = svc.get_usage_and_limits(current_user.organization_id)
+
+    # Outcome-based billing breakdown (promise-to-pay, payments collected, etc.)
+    plan = get_org_plan(db, current_user.organization_id)
+    summary = svc.get_usage_summary(current_user.organization_id)
+    result["outcomes"] = MeteringService(db).compute_outcome_billing(plan, summary)
+    return result
 
 
 @router.get("/usage/records")

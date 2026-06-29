@@ -22,9 +22,7 @@ from app.schemas.orchestrator import ChatRequest, ChatResponse, UltravoxJoinRequ
 from app.orchestration.session_manager import session_manager
 from app.services.monitoring_service import monitoring_service
 from app.services.hitl_service import HITLService
-from app.services.tools.registry import get_tool_schemas
 from app.services.agent_registry_service import AgentRegistryService
-from app.orchestration.inter_agent_bus import inter_agent_bus
 
 # Import modular components
 from app.orchestration.websocket_proxy import run_ultravox_proxy_session, is_ultravox_runtime
@@ -34,7 +32,6 @@ from app.orchestration.ultravox_call import (
     extract_agent_tool_names,
 )
 from app.services.ultravox_service import UltravoxService
-from app.orchestration.turn_processor import TurnProcessor, send_with_tts, stt_service
 from app.orchestration.tool_executor import execute_tool
 
 ultravox_service = UltravoxService()
@@ -145,7 +142,11 @@ async def _create_ultravox_join(
     if not selected_voice or selected_voice == "auto":
         selected_voice = settings.ULTRAVOX_VOICE
 
-    from app.orchestration.ultravox_call import build_template_context, resolve_call_greeting
+    from app.orchestration.ultravox_call import (
+        build_caller_memory_context,
+        build_template_context,
+        resolve_call_greeting,
+    )
     from app.services.ultravox_agent_sync import (
         ensure_ultravox_agent_id,
         start_ultravox_call_for_agent,
@@ -163,7 +164,15 @@ async def _create_ultravox_join(
         "channel": "browser_sdk",
         "spiffe_id": spiffe_id,
     }
-    template_context = build_template_context(agent, caller_id=body.caller_id, language=session_language)
+    caller_context = await build_caller_memory_context(
+        db, body.caller_id, organization_id=agent.organization_id, agent_id=agent_id
+    )
+    template_context = build_template_context(
+        agent,
+        caller_id=body.caller_id,
+        language=session_language,
+        extra={"callerContext": caller_context} if caller_context else None,
+    )
 
     ultravox_agent_id = await ensure_ultravox_agent_id(
         agent, db, active_persona=active_persona, language=session_language, voice=selected_voice,
@@ -370,233 +379,16 @@ async def websocket_endpoint(
                 await websocket.close(code=1011, reason="Runtime error")
         return
 
-    if settings.VOICE_RUNTIME == "ultravox":
-        await websocket.send_json({
-            "type": "error",
-            "message": "Custom orchestrator is disabled. Configure ULTRAVOX_API_KEY or set VOICE_RUNTIME=custom.",
-        })
-        await websocket.close(code=1003, reason="Ultravox required")
-        return
-
-    logger.info(f"Session isolation active for organization: {org_id}")
-
-    session_language = language or agent.language or "en-US"
-    session_voice = voice or "auto"
-
-    agent_config = agent.config or {}
-    session_id = str(uuid.uuid4())
-    await session_manager.create_session(
-        session_id=session_id,
-        agent_id=agent_id,
-        caller_id=caller_id,
-        metadata={
-            "channel": "websocket",
-            "floor_owner": "user",
-            "routing_mode": agent_config.get("routing_mode", "standard"),
-            "feature_flags": agent_config.get("feature_flags", {}),
-        },
-    )
-    
-    # Broadcast session start
-    await monitoring_service.broadcast_event(session_id, "session_start", {
-        "agent_id": agent_id,
-        "agent_name": agent.name,
-        "caller_id": caller_id
-    })
-    
-    # Initialize TurnProcessor
-    session_policy = active_policy or get_sample_policy()
-    processor = TurnProcessor(
-        db=db,
-        websocket=websocket,
-        agent=agent,
-        agent_id=agent_id,
-        session_id=session_id,
-        caller_id=caller_id,
-        org_id=org_id,
-        session_language=session_language,
-        session_voice=session_voice,
-        active_persona=active_persona,
-        active_tools=active_tools,
-        tool_schemas=get_tool_schemas(active_tools) if active_tools else None,
-        session_policy=session_policy
-    )
-    
-    # Load user historical memories
-    await processor.initialize_context()
-    
-    # Pre-cache UX tokens (Non-blocking)
-    asyncio.create_task(processor.voice_ux.precompute_tokens(voice=session_voice))
-    
+    # The custom (non-Ultravox) voice runtime has been removed; Ultravox is the
+    # sole production voice runtime. Reaching here means Ultravox is not configured.
     await websocket.send_json({
-        "type": "session_start",
-        "session_id": session_id,
-        "agent_name": agent.name
+        "type": "error",
+        "code": "ultravox_required",
+        "message": "Voice runtime unavailable. Configure ULTRAVOX_API_KEY to enable voice.",
     })
-    
-    # Queues and Tasks
-    input_queue = asyncio.Queue()
-    current_response_task: asyncio.Task = None
-    
-    async def read_websocket():
-        try:
-            while True:
-                data = await websocket.receive_text()
-                await input_queue.put(json.loads(data))
-        except WebSocketDisconnect:
-            await input_queue.put({"type": "disconnect"})
-        except Exception as e:
-            logger.error(f"WebSocket Read Error: {e}")
-            await input_queue.put({"type": "disconnect"})
+    await websocket.close(code=1011, reason="Ultravox not configured")
+    return
 
-    # Start reader
-    reader_task = asyncio.create_task(read_websocket())
-    
-    # HITL Listener Task
-    human_input_queue = asyncio.Queue()
-    
-    async def listen_for_human_intervention():
-        pubsub = await session_manager.get_human_message_listener(session_id)
-        try:
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    payload = json.loads(message["data"])
-                    if payload["type"] == "human_response":
-                        await human_input_queue.put(payload["text"])
-                        if current_response_task and not current_response_task.done():
-                            current_response_task.cancel()
-        except asyncio.CancelledError:
-            await pubsub.unsubscribe()
-        except Exception as e:
-            logger.error(f"HITL Listener Error: {e}")
-
-    hitl_task = asyncio.create_task(listen_for_human_intervention())
-    
-    try:
-        SILENCE_THRESHOLD = 30.0 # Seconds before we nudge or end
-        
-        while True:
-            try:
-                # Wait for user input with a timeout for silence detection
-                message = await asyncio.wait_for(input_queue.get(), timeout=SILENCE_THRESHOLD)
-            except asyncio.TimeoutError:
-                # Handle Silence
-                logger.info(f"Silence detected in session {session_id}")
-                nudge_text = "Are you still there? I'm here to help if you have any more questions."
-                await send_with_tts(websocket, nudge_text, language=session_language, voice=session_voice)
-                continue
-
-            if message["type"] == "disconnect":
-                break
-            
-            if message.get("type") == "interrupt":
-                await session_manager.set_floor_owner(session_id, "user")
-                if current_response_task and not current_response_task.done():
-                    current_response_task.cancel()
-                    logger.info("Interrupting current response task")
-                continue
-                
-            user_input = ""
-            stt_confidence = 1.0
-            stt_ms = 0.0
-            if "audio" in message:
-                try:
-                    import time as _time
-                    audio_data = base64.b64decode(message["audio"])
-                    stt_start = _time.perf_counter()
-                    transcript = await stt_service.transcribe(
-                        audio_data,
-                        language=session_language,
-                        mimetype=message.get("mimetype", "audio/webm"),
-                    )
-                    stt_ms = (_time.perf_counter() - stt_start) * 1000
-                    user_input = transcript.text
-                    stt_confidence = transcript.confidence
-                    logger.info(
-                        f"STT [{transcript.provider}] confidence={stt_confidence:.2f} ms={stt_ms:.0f}"
-                    )
-                except Exception as e:
-                    logger.error(f"STT Error: {e}")
-                    continue
-            elif "text" in message:
-                user_input = message["text"]
-                if "stt_confidence" in message:
-                    stt_confidence = float(message["stt_confidence"])
-            
-            if user_input:
-                # HITL Takeover Handling in endpoint
-                hitl_service = HITLService(db)
-                intervention = await hitl_service.get_intervention_status(session_id)
-                
-                # CASE A: HUMAN TAKEOVER
-                if intervention and intervention.mode == "takeover":
-                    logger.info(f"Session {session_id} in TAKEOVER mode. Routing user input to HITL.")
-                    await monitoring_service.broadcast_event(session_id, "hitl_takeover", {"active": True, "agent": intervention.user_id})
-                    await monitoring_service.broadcast_event(session_id, "transcription", {
-                        "text": user_input,
-                        "role": "user"
-                    })
-                    
-                    try:
-                        human_text = await asyncio.wait_for(human_input_queue.get(), timeout=60.0)
-                        await send_with_tts(websocket, human_text, language=session_language, voice=session_voice, sentiment_score=processor.context.sentiment_slope)
-                        await session_manager.add_to_history(session_id, "user", user_input)
-                        await session_manager.add_to_history(session_id, "assistant", human_text)
-                        processor.context.history.append({"role": "user", "content": user_input})
-                        processor.context.history.append({"role": "assistant", "content": human_text})
-                        await websocket.send_json({"type": "end_response"})
-                    except asyncio.TimeoutError:
-                        logger.warning("HITL Takeover timeout waiting for supervisor response")
-                    continue
-                
-                # CASE B: WHISPER SUGGESTION MODE
-                if intervention and intervention.mode == "whisper":
-                    logger.info(f"Session {session_id} in WHISPER mode. Suggesting response.")
-                    await monitoring_service.broadcast_event(session_id, "transcription", {
-                        "text": user_input,
-                        "role": "user"
-                    })
-                    
-                    suggestion_prompt = f"{active_persona}\n\nSUGGESTION MODE: Provide a concise response for the supervisor to use."
-                    suggestion = await processor.llm_service.generate_response(user_input, suggestion_prompt, processor.context.history)
-                    
-                    await monitoring_service.broadcast_event(session_id, "whisper_suggestion", {
-                        "suggestion": suggestion,
-                        "original_input": user_input
-                    })
-                    
-                    try:
-                        approved_text = await asyncio.wait_for(human_input_queue.get(), timeout=30.0)
-                    except asyncio.TimeoutError:
-                        logger.warning("Whisper timeout, falling back to suggestion")
-                        approved_text = suggestion
-                        
-                    await send_with_tts(websocket, approved_text, language=session_language, voice=session_voice, sentiment_score=processor.context.sentiment_slope)
-                    await session_manager.add_to_history(session_id, "user", user_input)
-                    await session_manager.add_to_history(session_id, "assistant", approved_text)
-                    processor.context.history.append({"role": "user", "content": user_input})
-                    processor.context.history.append({"role": "assistant", "content": approved_text})
-                    await websocket.send_json({"type": "end_response"})
-                    continue
-
-                # Barge-in: Cancel any active response
-                if current_response_task and not current_response_task.done():
-                    current_response_task.cancel()
-                
-                await session_manager.set_floor_owner(session_id, "user")
-                current_response_task = asyncio.create_task(
-                    processor.process_turn(user_input, stt_confidence=stt_confidence, stt_ms=stt_ms)
-                )
-
-    except Exception as e:
-        logger.error(f"Orchestrator Loop Error: {e}")
-    finally:
-        reader_task.cancel()
-        hitl_task.cancel()
-        if current_response_task and not current_response_task.done():
-            current_response_task.cancel()
-            
-        await processor.log_session_completion()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, db: Session = Depends(database.get_db)):
@@ -649,8 +441,7 @@ async def chat_endpoint(request: ChatRequest, db: Session = Depends(database.get
 
 @router.get("/voices")
 async def get_voices(primaryLanguage: Optional[str] = None):
-    """Proxy to get available voices from active voice runtime provider."""
+    """Proxy to get available voices from the Ultravox voice runtime."""
     if is_ultravox_runtime():
         return await ultravox_service.list_voices(primaryLanguage=primaryLanguage)
-    from app.orchestration.turn_processor import tts_service
-    return await tts_service.get_voices()
+    raise HTTPException(status_code=503, detail="Voice runtime unavailable. Configure ULTRAVOX_API_KEY.")

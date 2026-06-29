@@ -21,6 +21,8 @@ class BaseTool(ABC):
     preconditions: list[str] = []
     postconditions: list[str] = []
     cost_per_call: float = 0.0
+    # When True, the executor injects _db (Session) and _session_id (str) into execute().
+    needs_context: bool = False
     
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:

@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from app.models.analytics import CallLog
 from app.models.agent import Agent
 from app.services.compliance_service import redactor
-from app.services.llm.groq_provider import GroqLLM
+from app.services.llm.factory import get_reasoning_llm
 from app.core.metrics import calls_total, call_duration_seconds, cost_total
 from app.services.usage_service import UsageService
 import json
@@ -19,7 +19,8 @@ from app.core.config import settings
 class AnalyticsService:
     def __init__(self, db: Session):
         self.db = db
-        self.classifier_llm = GroqLLM(model="llama-3.1-8b-instant")
+        # Outcome classification drives billing — use the strong reasoning model.
+        self.classifier_llm = get_reasoning_llm()
         self.usage = UsageService(db)
 
     async def log_call_completion(self, session_data: Dict[str, Any], agent: Optional[Agent] = None):

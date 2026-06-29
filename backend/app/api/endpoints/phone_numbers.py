@@ -25,6 +25,14 @@ class ConfigureRequest(BaseModel):
     voice_url: str
 
 
+class DltUpdateRequest(BaseModel):
+    dlt_entity_id: Optional[str] = None
+    dlt_header: Optional[str] = None
+    number_series: Optional[str] = None  # "1600" transactional | "140" promotional
+    dlt_status: Optional[str] = None  # unregistered | pending | registered
+    consent_template_id: Optional[str] = None
+
+
 @router.get("/available")
 async def search_available(
     country_code: str = Query("IN"),
@@ -97,6 +105,31 @@ async def configure_number(
             raise HTTPException(status_code=404, detail="Phone number not found")
         result = svc.configure_voice_url(record.twilio_sid, data.voice_url)
         return result
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{number_id}/dlt")
+async def update_dlt(
+    number_id: str,
+    data: DltUpdateRequest,
+    current_user: User = Depends(get_current_user_required),
+    db: Session = Depends(database.get_db),
+):
+    """Update DLT (TRAI) registration metadata for an owned number."""
+    if not current_user.organization_id:
+        raise HTTPException(status_code=404, detail="No organization assigned")
+    svc = PhoneNumberService(db)
+    try:
+        return svc.set_dlt(
+            number_id,
+            current_user.organization_id,
+            dlt_entity_id=data.dlt_entity_id,
+            dlt_header=data.dlt_header,
+            number_series=data.number_series,
+            dlt_status=data.dlt_status,
+            consent_template_id=data.consent_template_id,
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

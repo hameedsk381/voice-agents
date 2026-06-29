@@ -224,6 +224,91 @@ const scenarios: Scenario[] = [
     ]
   },
   {
+    name: "Appt. Booking",
+    lang: "English",
+    flag: "🏥",
+    title: "Healthcare Inbound Booking",
+    turns: [
+      {
+        speaker: "agent",
+        text: "Good morning! You've reached MediCare Clinics. How can I help you today?",
+        goal: "Identify caller intent",
+        successCriteria: ["Caller intent identified == true"],
+        episodicMemory: ["Inbound call received"],
+        workingMemory: { clinic: "MediCare Clinics" },
+        confidence: 99,
+        sentiment: "Warm / Welcoming",
+        frustrationSlope: "Flat (0.0)"
+      },
+      {
+        speaker: "user",
+        text: "Hi, I'd like to book an appointment with Dr. Sharma. It's been a while since my last checkup.",
+        goal: "Identify caller intent",
+        successCriteria: ["Caller intent identified == true"],
+        episodicMemory: ["Caller wants appointment with Dr. Sharma"],
+        workingMemory: { clinic: "MediCare Clinics", doctor: "Dr. Sharma", type: "Checkup" },
+        confidence: 97,
+        sentiment: "Friendly / Casual",
+        frustrationSlope: "Flat (0.0)"
+      },
+      {
+        speaker: "agent",
+        text: "Dr. Sharma has slots available tomorrow at 10 AM, 2 PM, or Thursday at 11 AM. Which works best for you?",
+        goal: "Offer available slots",
+        successCriteria: ["Slot preference captured == true"],
+        episodicMemory: ["Caller wants Dr. Sharma", "Offered 3 available slots"],
+        workingMemory: { doctor: "Dr. Sharma", slots: "Tomorrow 10 AM, 2 PM / Thu 11 AM" },
+        confidence: 98,
+        sentiment: "Helpful / Efficient",
+        frustrationSlope: "Flat (0.0)"
+      },
+      {
+        speaker: "user",
+        text: "Tomorrow at 10 AM would be perfect.",
+        goal: "Confirm slot selection",
+        successCriteria: ["Slot confirmed == true"],
+        episodicMemory: ["Caller selected tomorrow 10 AM"],
+        workingMemory: { doctor: "Dr. Sharma", slot: "Tomorrow 10:00 AM" },
+        confidence: 99,
+        sentiment: "Decisive / Satisfied",
+        frustrationSlope: "Flat (0.0)"
+      },
+      {
+        speaker: "agent",
+        text: "Got it! May I have your name and mobile number to confirm the booking and send you a reminder?",
+        goal: "Capture patient identity",
+        successCriteria: ["Name captured == true", "Mobile captured == true"],
+        episodicMemory: ["Slot confirmed: Tomorrow 10 AM", "Requesting patient details"],
+        workingMemory: { doctor: "Dr. Sharma", slot: "Tomorrow 10:00 AM" },
+        confidence: 98,
+        sentiment: "Professional / Attentive",
+        frustrationSlope: "Flat (0.0)"
+      },
+      {
+        speaker: "user",
+        text: "Sure, it's Priya Nair, and my number is 98400 12345.",
+        goal: "Capture patient identity",
+        successCriteria: ["Name captured == true", "Mobile captured == true"],
+        episodicMemory: ["Patient: Priya Nair", "Mobile: 98400 12345"],
+        workingMemory: { patient: "Priya Nair", mobile: "98400 12345", doctor: "Dr. Sharma", slot: "Tomorrow 10:00 AM" },
+        confidence: 97,
+        sentiment: "Cooperative",
+        frustrationSlope: "Flat (0.0)"
+      },
+      {
+        speaker: "agent",
+        text: "Wonderful, Priya! Your appointment with Dr. Sharma is confirmed for tomorrow at 10 AM. An SMS reminder will be sent to 98400 12345 one hour before. See you then!",
+        goal: "Confirm booking & trigger SMS",
+        successCriteria: ["Booking logged in calendar == true", "SMS reminder scheduled == true"],
+        episodicMemory: ["Booking confirmed: Priya Nair", "SMS reminder scheduled", "CRM updated"],
+        workingMemory: { status: "Booked", reminder: "1 hr before", action: "SMS sent" },
+        confidence: 99,
+        sentiment: "Warm / Reassuring",
+        frustrationSlope: "Negative (-0.4)"
+      }
+    ]
+  },
+  {
     name: "Order Verification",
     lang: "Tamil / தமிழ்",
     flag: "🇮🇳",
@@ -420,18 +505,18 @@ export default function Hero() {
               className="flex items-center gap-6 border-t border-border pt-6"
             >
               <div>
-                <span className="block text-2xl font-black text-foreground">12+</span>
-                <span className="text-xs text-muted-foreground font-medium">Indian Languages</span>
+                <span className="block text-2xl font-black text-foreground">3×</span>
+                <span className="text-xs text-muted-foreground font-medium">Collections ROI</span>
               </div>
               <div className="w-px h-8 bg-border" />
               <div>
-                <span className="block text-2xl font-black text-foreground">Real-time</span>
-                <span className="text-xs text-muted-foreground font-medium">Voice AI</span>
+                <span className="block text-2xl font-black text-foreground">60%</span>
+                <span className="text-xs text-muted-foreground font-medium">Fewer No-Shows</span>
               </div>
               <div className="w-px h-8 bg-border" />
               <div>
-                <span className="block text-2xl font-black text-foreground">99%+</span>
-                <span className="text-xs text-muted-foreground font-medium">STT Accuracy</span>
+                <span className="block text-2xl font-black text-foreground">24/7</span>
+                <span className="text-xs text-muted-foreground font-medium">Zero Downtime</span>
               </div>
             </motion.div>
           </div>

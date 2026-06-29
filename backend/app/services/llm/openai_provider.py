@@ -6,8 +6,10 @@ from .base import LLMProvider
 from app.core.config import settings
 
 class OpenAILLM(LLMProvider):
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = "gpt-3.5-turbo", temperature: float = 0.7):
         self.api_key = api_key or settings.OPENAI_API_KEY
+        self.model = model
+        self.temperature = temperature
         if self.api_key:
             self.client = AsyncOpenAI(api_key=self.api_key)
         else:
@@ -16,13 +18,13 @@ class OpenAILLM(LLMProvider):
     async def generate_response(self, prompt: str, system_prompt: str, history: list) -> str:
         if not self.client:
             return f"Mock response to: {prompt}"
-            
+
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
-        
+
         response = await self.client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=self.model,
             messages=messages,
-            temperature=0.7,
+            temperature=self.temperature,
         )
         return response.choices[0].message.content
 
@@ -38,10 +40,10 @@ class OpenAILLM(LLMProvider):
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         
         stream = await self.client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=self.model,
             messages=messages,
             stream=True,
-            temperature=0.7,
+            temperature=self.temperature,
         )
         
         async for chunk in stream:

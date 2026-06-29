@@ -19,6 +19,9 @@ import {
     Eye,
     Network,
     Phone,
+    MessageSquare,
+    PhoneIncoming,
+    TrendingUp,
 } from "lucide-react";
 
 const navGroups = [
@@ -34,7 +37,10 @@ const navGroups = [
         title: "Operations",
         items: [
             { name: 'Phone Numbers', href: '/dashboard/phone-numbers', icon: Phone },
+            { name: 'Collections', href: '/dashboard/collections', icon: TrendingUp },
             { name: 'Campaigns', href: '/dashboard/campaigns', icon: PhoneCall },
+            { name: 'Inbound Flows', href: '/dashboard/inbound-flows', icon: PhoneIncoming },
+            { name: 'Channels', href: '/dashboard/channels', icon: MessageSquare },
             { name: 'Workflows', href: '/dashboard/workflows', icon: GitBranch },
             { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity },
             { name: 'Approvals', href: '/dashboard/approvals', icon: ShieldCheck },

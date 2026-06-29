@@ -17,6 +17,14 @@ class PhoneNumber(Base):
     capabilities = Column(JSON, default=dict)
     region = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+
+    # India DLT (Distributed Ledger Technology) registration metadata — TRAI/TCCCPR
+    dlt_entity_id = Column(String, nullable=True)  # Principal Entity ID on the DLT platform
+    dlt_header = Column(String, nullable=True)  # Registered sender ID / header
+    number_series = Column(String, nullable=True)  # "1600" transactional, "140" promotional
+    dlt_status = Column(String, default="unregistered")  # unregistered | pending | registered
+    consent_template_id = Column(String, nullable=True)  # Registered consent template reference
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

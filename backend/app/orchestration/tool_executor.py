@@ -170,9 +170,16 @@ async def execute_tool(
     max_retries = 2
     last_exception = None
 
+    # Context-aware tools (e.g. collections outcome tools) need DB + session access.
+    exec_kwargs = dict(arguments)
+    if getattr(tool, "needs_context", False):
+        exec_kwargs["_db"] = db
+        exec_kwargs["_session_id"] = session_id
+        exec_kwargs["_agent_id"] = agent_id
+
     for attempt in range(1, max_retries + 1):
         try:
-            tr: ToolResult = await tool.execute(**arguments)
+            tr: ToolResult = await tool.execute(**exec_kwargs)
             logger.info(
                 f"Tool '{tool_name}' executed successfully (attempt {attempt}): "
                 f"confidence={tr.confidence}, result={tr.result[:100] if tr.result else ''}"

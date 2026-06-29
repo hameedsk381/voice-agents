@@ -1,7 +1,7 @@
 import re
 from typing import List, Dict, Any, Union
 from app.schemas.compliance import ComplianceRule, ComplianceViolation, ComplianceCheckResult, ComplianceSeverity
-from app.services.llm.groq_provider import GroqLLM
+from app.services.llm.factory import get_reasoning_llm
 from app.core.config import settings
 import json
 from loguru import logger
@@ -39,7 +39,9 @@ class ComplianceValidator:
     """The 'Shadow Agent' that audits every turn for regulatory safety."""
     
     def __init__(self, llm_service=None):
-        self.llm = llm_service or GroqLLM()
+        # Compliance auditing is high-stakes (RBI/DPDP evidence) — default to the
+        # strong reasoning model, not the fast in-turn model.
+        self.llm = llm_service or get_reasoning_llm()
         self.redactor = PIIRedactor()
 
     async def validate_turn(

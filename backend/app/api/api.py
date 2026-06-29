@@ -22,6 +22,10 @@ from app.api.endpoints import (
     billing,
     organizations,
     phone_numbers,
+    sms,
+    whatsapp,
+    demo,
+    payments,
 )
 
 api_router = APIRouter()
@@ -49,3 +53,7 @@ api_router.include_router(agent_registry.router, prefix="/agent-registry", tags=
 api_router.include_router(agent_identity.router, prefix="/identity", tags=["agent-identity"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
 api_router.include_router(phone_numbers.router, prefix="/phone-numbers", tags=["phone-numbers"])
+api_router.include_router(sms.router, prefix="/sms", tags=["sms"])
+api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
+api_router.include_router(demo.router, prefix="/demo", tags=["demo"])
+api_router.include_router(payments.router, prefix="/payments", tags=["payments"])

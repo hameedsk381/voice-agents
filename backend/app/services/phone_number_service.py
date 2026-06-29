@@ -167,10 +167,63 @@ class PhoneNumberService:
                 "capabilities": r.capabilities or {},
                 "region": r.region,
                 "is_active": r.is_active,
+                "dlt_entity_id": r.dlt_entity_id,
+                "dlt_header": r.dlt_header,
+                "number_series": r.number_series,
+                "dlt_status": r.dlt_status or "unregistered",
+                "consent_template_id": r.consent_template_id,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in records
         ]
+
+    def set_dlt(
+        self,
+        number_id: str,
+        organization_id: str,
+        *,
+        dlt_entity_id: Optional[str] = None,
+        dlt_header: Optional[str] = None,
+        number_series: Optional[str] = None,
+        dlt_status: Optional[str] = None,
+        consent_template_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update DLT (TRAI) registration metadata for an owned number."""
+        if not self.db:
+            raise RuntimeError("No database session available")
+        record = self.db.query(PhoneNumber).filter(
+            PhoneNumber.id == number_id,
+            PhoneNumber.organization_id == organization_id,
+        ).first()
+        if not record:
+            raise RuntimeError("Phone number not found")
+
+        if dlt_entity_id is not None:
+            record.dlt_entity_id = dlt_entity_id
+        if dlt_header is not None:
+            record.dlt_header = dlt_header
+        if number_series is not None:
+            if number_series not in ("1600", "140"):
+                raise RuntimeError("number_series must be '1600' (transactional) or '140' (promotional)")
+            record.number_series = number_series
+        if dlt_status is not None:
+            if dlt_status not in ("unregistered", "pending", "registered"):
+                raise RuntimeError("dlt_status must be one of: unregistered, pending, registered")
+            record.dlt_status = dlt_status
+        if consent_template_id is not None:
+            record.consent_template_id = consent_template_id
+
+        self.db.commit()
+        self.db.refresh(record)
+        return {
+            "id": record.id,
+            "phone_number": record.phone_number,
+            "dlt_entity_id": record.dlt_entity_id,
+            "dlt_header": record.dlt_header,
+            "number_series": record.number_series,
+            "dlt_status": record.dlt_status,
+            "consent_template_id": record.consent_template_id,
+        }
 
     # ─── Configure Voice URL ─────────────────────────────────────────────
 

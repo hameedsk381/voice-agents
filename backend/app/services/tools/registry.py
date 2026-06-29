@@ -331,38 +331,166 @@ class TransferToHumanTool(BaseTool):
 
 class SearchKnowledgeBaseTool(BaseTool):
     name = "search_knowledge_base"
-    description = "Search the company knowledge base for policies, FAQs, return/refund rules, and documentation relevant to Indian customers."
+    description = "Search this agent's knowledge base (policies, FAQs, product/loan details, documentation) for facts relevant to the customer's question. Use whenever the customer asks something that may be answered by company documentation."
     parameters = {
         "type": "object",
         "properties": {
             "topic": {
                 "type": "string",
-                "description": "Topic or question to search for (e.g., 'return policy', 'EMI options', 'late fee')"
+                "description": "The question or topic to look up (e.g., 'late payment fee', 'foreclosure charges', 'EMI restructuring options')"
             }
         },
         "required": ["topic"]
     }
     cost_per_call = 0.05
+    needs_context = True
 
-    async def execute(self, topic: str) -> ToolResult:
-        responses = {
-            "return": "Our return policy allows returns within 10 days of delivery. Items must be unused with original packaging. Pickup is free across India.",
-            "refund": "Refunds are processed within 5-7 business days after pickup. Amount is credited to the original payment method (UPI/card/NetBanking).",
-            "emi": "We offer EMI options via all major Indian banks: SBI, HDFC, ICICI, Axis, and Kotak. 3 to 24 month tenures available.",
-            "shipping": "Free shipping on orders above ₹499. Standard delivery: 3-5 business days. Express: 1-2 days (₹99 extra).",
-            "gst": "GST invoice is provided for all orders. You can download it from your account under 'My Orders' > 'Invoice'.",
-        }
-        for key, response in responses.items():
-            if key in topic.lower():
-                return ToolResult(
-                    result=response,
-                    confidence=0.9,
-                    metadata={"topic": topic, "matched_key": key}
-                )
+    async def execute(self, topic: str, _db=None, _session_id=None, _agent_id=None) -> ToolResult:
+        if not _db or not _agent_id:
+            return ToolResult(
+                result="I don't have a knowledge base available for this query right now.",
+                confidence=0.4,
+                metadata={"topic": topic, "reason": "no_context"},
+            )
+        try:
+            from app.services.knowledge_service import KnowledgeService
+
+            chunks = await KnowledgeService(_db).query_knowledge(
+                _agent_id, topic, limit=3, min_score=0.45
+            )
+        except Exception as exc:
+            from loguru import logger
+            logger.error(f"Knowledge search failed for agent {_agent_id}: {exc}")
+            return ToolResult(
+                result="I couldn't reach the knowledge base just now.",
+                confidence=0.3,
+                metadata={"topic": topic, "error": str(exc)},
+            )
+
+        if not chunks:
+            return ToolResult(
+                result=f"I don't have anything in my knowledge base about '{topic}'.",
+                confidence=0.5,
+                metadata={"topic": topic, "matches": 0},
+            )
+
+        combined = " ".join(c.get("content", "").strip() for c in chunks if c.get("content"))
+        top_score = max((c.get("score", 0) for c in chunks), default=0.0)
         return ToolResult(
-            result=f"Here is what I found about '{topic}': For more details, please visit our Help Center or ask for a specific policy.",
-            confidence=0.6,
-            metadata={"topic": topic}
+            result=combined or f"I found related material on '{topic}' but couldn't extract a clear answer.",
+            confidence=round(float(top_score), 2) if top_score else 0.7,
+            metadata={"topic": topic, "matches": len(chunks)},
+        )
+
+
+class RecordPromiseToPayTool(BaseTool):
+    name = "record_promise_to_pay"
+    description = (
+        "Record a borrower's commitment to pay an overdue amount by a specific date. "
+        "Call this the moment the customer agrees to pay — it marks the call a success."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "amount": {
+                "type": "number",
+                "description": "Amount the customer promised to pay, in rupees"
+            },
+            "date": {
+                "type": "string",
+                "description": "Date the customer promised to pay by (e.g. '2026-07-05' or 'next Friday')"
+            }
+        },
+        "required": ["amount", "date"]
+    }
+    cost_per_call = 0.0
+    needs_context = True
+
+    async def execute(self, amount: float = 0, date: str = "", _db=None, _session_id=None, _agent_id=None) -> ToolResult:
+        from app.orchestration.session_manager import session_manager
+
+        if _session_id:
+            await session_manager.update_session_metadata(_session_id, {
+                "collections_outcome": {
+                    "type": "promise_to_pay",
+                    "amount": amount,
+                    "date": date,
+                }
+            })
+        return ToolResult(
+            result=f"Noted. I've recorded your commitment to pay ₹{amount:,.0f} by {date}. Thank you.",
+            confidence=0.98,
+            metadata={"outcome": "promise_to_pay", "amount": amount, "date": date},
+        )
+
+
+class SendPaymentLinkTool(BaseTool):
+    name = "send_payment_link"
+    description = (
+        "Generate a secure payment link for the outstanding amount and send it to the "
+        "customer over SMS so they can pay immediately. Use after the customer agrees to pay now."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "amount": {
+                "type": "number",
+                "description": "Amount to collect, in rupees"
+            }
+        },
+        "required": ["amount"]
+    }
+    cost_per_call = 0.0
+    needs_context = True
+
+    async def execute(self, amount: float = 0, _db=None, _session_id=None, _agent_id=None) -> ToolResult:
+        from app.orchestration.session_manager import session_manager
+        from app.services.razorpay_service import RazorpayService
+        from app.services.sms_service import SmsService
+
+        customer_phone = None
+        organization_id = None
+        if _session_id:
+            session = await session_manager.get_session(_session_id)
+            if session:
+                customer_phone = session.get("caller_id")
+                organization_id = (session.get("metadata") or {}).get("org_id")
+
+        rzp = RazorpayService()
+        link = rzp.create_payment_link(
+            amount,
+            customer_phone=customer_phone,
+            description="EMI payment",
+            notes={
+                "session_id": _session_id or "",
+                "agent_id": _agent_id or "",
+                "organization_id": organization_id or "",
+            },
+        )
+        short_url = link.get("short_url")
+
+        # Send the link over SMS (best-effort; mock when Twilio unconfigured).
+        if customer_phone and short_url:
+            try:
+                SmsService(_db).send_message(
+                    to_phone=customer_phone,
+                    message=f"Pay your EMI of ₹{amount:,.0f} securely here: {short_url}",
+                    organization_id=organization_id,
+                )
+            except Exception:
+                pass
+
+        if _session_id:
+            await session_manager.update_session_metadata(_session_id, {
+                "payment_link_id": link.get("id"),
+                "payment_link_amount": amount,
+            })
+
+        return ToolResult(
+            result=f"I've sent a secure payment link for ₹{amount:,.0f} to your phone by SMS. "
+                   "Please tap it to pay.",
+            confidence=0.97,
+            metadata={"payment_link_id": link.get("id"), "short_url": short_url, "amount": amount},
         )
 
 
@@ -378,7 +506,23 @@ AVAILABLE_TOOLS = {
     "schedule_callback": ScheduleCallbackTool(),
     "transfer_to_human": TransferToHumanTool(),
     "search_knowledge_base": SearchKnowledgeBaseTool(),
+    "record_promise_to_pay": RecordPromiseToPayTool(),
+    "send_payment_link": SendPaymentLinkTool(),
 }
+
+
+def get_collections_toolset() -> list:
+    """Tools for a collections / EMI-recovery agent."""
+    return [
+        "verify_aadhaar",
+        "check_loan_emi",
+        "check_upi_payment",
+        "record_promise_to_pay",
+        "send_payment_link",
+        "search_knowledge_base",
+        "schedule_callback",
+        "transfer_to_human",
+    ]
 
 ALL_TOOL_NAMES = list(AVAILABLE_TOOLS.keys())
 

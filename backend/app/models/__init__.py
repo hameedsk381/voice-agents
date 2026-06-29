@@ -7,7 +7,7 @@ from .tenant import Organization
 from .campaign import Campaign, CampaignContact
 from .analytics import CallLog, TraceLog, EvalRun, EvalTestCaseResult
 from .hitl import PendingAction
-from .compliance import AuditLog, RegulatoryPolicy
+from .compliance import AuditLog, RegulatoryPolicy, DoNotCall, PilotApplication
 from .knowledge import AgentKnowledge
 from .policy_rule import PolicyRule
 from .checkpoint import CallCheckpoint

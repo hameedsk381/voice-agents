@@ -26,9 +26,11 @@ from app.orchestration.ultravox_call import (
 )
 from app.core.config import settings
 from app.orchestration.audio_handler import pcm16le_to_wav_bytes
-from app.orchestration.tool_executor import execute_tool
-from app.services.compliance_service import compliance_validator, redactor, get_baseline_rules
-from app.models.compliance import AuditLog
+from app.orchestration.ultravox_events import (
+    UltravoxTranscriptTracker,
+    parse_tool_invocation,
+    run_ultravox_tool,
+)
 
 ultravox_service = UltravoxService()
 
@@ -42,63 +44,6 @@ def is_ultravox_runtime() -> bool:
 def _use_ultravox_runtime() -> bool:
     return is_ultravox_runtime()
 
-async def _run_ultravox_compliance_audit(
-    session_id: str,
-    agent_id: str,
-    organization_id: Optional[str],
-    turn_index: int,
-    user_input: str,
-    ai_response: str,
-    state_name: str = "ULTRAVOX_RUNTIME",
-) -> None:
-    """Thread-safe and loop-safe compliance auditor for Ultravox proxy sessions."""
-    if not user_input or not ai_response:
-        return
-
-    from app.core.database import SessionLocal
-    from fastapi.concurrency import run_in_threadpool
-
-    def fetch_rules():
-        with SessionLocal() as local_db:
-            return get_baseline_rules(db=local_db, organization_id=organization_id)
-
-    rules = await run_in_threadpool(fetch_rules)
-    audit_result = await compliance_validator.validate_turn(
-        user_input,
-        ai_response,
-        rules,
-        turn_index,
-    )
-
-    def save_audit():
-        with SessionLocal() as local_db:
-            audit_log = AuditLog(
-                session_id=session_id,
-                turn_index=turn_index,
-                user_message=redactor.redact_text(user_input),
-                ai_response=redactor.redact_text(ai_response),
-                is_compliant=audit_result.is_compliant,
-                violations=[v.dict() for v in audit_result.violations],
-                risk_score=audit_result.risk_score,
-                agent_id=agent_id,
-                organization_id=organization_id,
-                state_name=state_name,
-            )
-            local_db.add(audit_log)
-            local_db.commit()
-
-    await run_in_threadpool(save_audit)
-
-    if not audit_result.is_compliant:
-        await monitoring_service.broadcast_event(
-            session_id,
-            "compliance_alert",
-            {
-                "severity": "critical",
-                "risk_score": audit_result.risk_score,
-                "violations": [v.rule_name for v in audit_result.violations],
-            },
-        )
 
 async def run_ultravox_proxy_session(
     websocket: WebSocket,
@@ -161,9 +106,7 @@ async def run_ultravox_proxy_session(
         "provider": "ultravox",
     })
 
-    transcript_buffers: Dict[tuple, str] = {}
-    unanswered_user_turns: List[str] = []
-    turn_count = 0
+    tracker = UltravoxTranscriptTracker(agent_id, org_id, state_name="ULTRAVOX_RUNTIME")
     closed_by_client = False
 
     async with websockets.connect(join_url, max_size=None) as uvx_ws:
@@ -199,7 +142,6 @@ async def run_ultravox_proxy_session(
                     await uvx_ws.send(raw_audio)
 
         async def ultravox_to_client():
-            nonlocal turn_count
             async for uvx_message in uvx_ws:
                 if isinstance(uvx_message, (bytes, bytearray)):
                     wav_audio = pcm16le_to_wav_bytes(
@@ -222,56 +164,19 @@ async def run_ultravox_proxy_session(
 
                 if event_type == "transcript":
                     role = event.get("role", "agent")
-                    ordinal = int(event.get("ordinal") or 0)
-                    key = (role, ordinal)
-
-                    delta = event.get("delta") or ""
-                    full_text = event.get("text")
                     is_final = bool(event.get("final"))
 
-                    if full_text is not None:
-                        transcript_buffers[key] = full_text
-                    elif delta:
-                        transcript_buffers[key] = transcript_buffers.get(key, "") + delta
-
+                    # Stream agent text to the browser client as it arrives.
                     if role == "agent":
-                        chunk = delta or (full_text if not is_final else "")
+                        chunk = (event.get("delta") or "") or (event.get("text") if not is_final else "")
                         if chunk:
                             await websocket.send_json({"type": "text_chunk", "text": chunk})
 
-                    if is_final:
-                        final_text = transcript_buffers.pop(key, full_text or delta).strip()
-                        if final_text:
-                            mapped_role = "assistant" if role == "agent" else "user"
-                            await session_manager.add_to_history(session_id, mapped_role, final_text)
-                            await monitoring_service.broadcast_event(session_id, "transcription", {
-                                "text": final_text,
-                                "role": mapped_role
-                            })
-                            if mapped_role == "user":
-                                unanswered_user_turns.append(final_text)
-                            else:
-                                user_turn_for_audit = (
-                                    unanswered_user_turns.pop(0)
-                                    if unanswered_user_turns
-                                    else ""
-                                )
-                                if user_turn_for_audit:
-                                    turn_count += 1
-                                    try:
-                                        await _run_ultravox_compliance_audit(
-                                            session_id=session_id,
-                                            agent_id=agent_id,
-                                            organization_id=org_id,
-                                            turn_index=turn_count,
-                                            user_input=user_turn_for_audit,
-                                            ai_response=final_text,
-                                        )
-                                    except Exception as audit_error:
-                                        logger.error(f"Ultravox compliance audit failed: {audit_error}")
+                    # Shared buffering, history, transcription broadcast, and per-turn audit.
+                    await tracker.handle(event, session_id)
 
-                        if role == "agent":
-                            await websocket.send_json({"type": "end_response"})
+                    if is_final and role == "agent":
+                        await websocket.send_json({"type": "end_response"})
                     continue
 
                 if event_type == "state":
@@ -287,15 +192,7 @@ async def run_ultravox_proxy_session(
                     "data_connection_tool_invocation",
                     "tool_invocation",  # Legacy fallback
                 }:
-                    tool_name = event.get("toolName") or event.get("name")
-                    invocation_id = event.get("invocationId") or event.get("id")
-                    tool_arguments = (
-                        event.get("parameters")
-                        or event.get("toolCallArguments")
-                        or {}
-                    )
-                    if not isinstance(tool_arguments, dict):
-                        tool_arguments = {}
+                    tool_name, invocation_id, tool_arguments = parse_tool_invocation(event)
 
                     await websocket.send_json({
                         "type": "tool_call",
@@ -370,80 +267,51 @@ async def run_ultravox_proxy_session(
                         })
                         continue
 
-                    try:
-                        result_dict = await execute_tool(
-                            tool_name,
-                            tool_arguments,
-                            db,
-                            agent_id,
-                            session_id,
-                        )
+                    result_payload, meta = await run_ultravox_tool(
+                        tool_name=tool_name,
+                        arguments=tool_arguments,
+                        invocation_id=invocation_id,
+                        db=db,
+                        agent_id=agent_id,
+                        session_id=session_id,
+                        result_message_type=result_message_type,
+                    )
 
-                        result_text = result_dict.get("result", "")
-                        confidence = result_dict.get("confidence", 1.0)
-                        metadata = result_dict.get("metadata", {})
-                        is_error = result_dict.get("error", False)
-
-                        # Build result payload for Ultravox
-                        result_payload: Dict[str, Any] = {
-                            "type": result_message_type,
-                            "invocationId": invocation_id,
-                            "result": result_text,
-                            "responseType": "tool-response",
-                        }
-
-                        # Wire confidence and metadata into call state so Ultravox
-                        # can make informed decisions about next actions
+                    # Wire confidence/metadata into call state so Ultravox can
+                    # make informed decisions about next actions.
+                    if not meta.get("error"):
                         call_state = {
-                            "_tool_confidence": confidence,
-                            "_tool_metadata": metadata,
+                            "_tool_confidence": meta.get("confidence"),
+                            "_tool_metadata": meta.get("metadata", {}),
                         }
                         result_payload["updateCallState"] = call_state
                         await session_manager.update_session(
                             session_id, {"ultravox_state": call_state}
                         )
 
-                        if is_error:
-                            result_payload["errorType"] = "implementation-error"
-                            result_payload["errorMessage"] = result_text
-
-                        await uvx_ws.send(json.dumps(result_payload))
-                        await monitoring_service.broadcast_event(session_id, "tool_result", {
-                            "name": tool_name,
-                            "arguments": tool_arguments,
-                            "result": result_text,
-                            "confidence": confidence,
-                            "metadata": metadata,
-                            "provider": "ultravox",
-                            "error": is_error,
-                        })
-                        await websocket.send_json({
-                            "type": "tool_result",
-                            "name": tool_name,
-                            "result": result_text,
-                            "confidence": confidence,
-                            "metadata": metadata,
-                        })
-                    except Exception as tool_error:
-                        logger.error(f"Ultravox tool execution failed ({tool_name}): {tool_error}")
-                        await uvx_ws.send(json.dumps({
-                            "type": result_message_type,
-                            "invocationId": invocation_id,
-                            "responseType": "tool-response",
-                            "errorType": "implementation-error",
-                            "errorMessage": str(tool_error),
-                        }))
+                    await uvx_ws.send(json.dumps(result_payload))
+                    await monitoring_service.broadcast_event(session_id, "tool_result", {
+                        "name": meta["name"],
+                        "arguments": meta["arguments"],
+                        "result": meta["result"],
+                        "confidence": meta.get("confidence"),
+                        "metadata": meta.get("metadata", {}),
+                        "provider": "ultravox",
+                        "error": meta.get("error", False),
+                    })
+                    if meta.get("error"):
                         await websocket.send_json({
                             "type": "tool_error",
-                            "name": tool_name,
-                            "message": str(tool_error),
+                            "name": meta["name"],
+                            "message": meta["result"],
                         })
-                        await monitoring_service.broadcast_event(session_id, "tool_result", {
-                            "name": tool_name,
-                            "arguments": tool_arguments,
-                            "result": str(tool_error),
-                            "provider": "ultravox",
-                            "error": True,
+                    else:
+                        await websocket.send_json({
+                            "type": "tool_result",
+                            "name": meta["name"],
+                            "result": meta["result"],
+                            "confidence": meta.get("confidence"),
+                            "metadata": meta.get("metadata", {}),
                         })
                     continue
 

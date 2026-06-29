@@ -15,7 +15,11 @@ from app.models import agent as models
 from app.models.campaign import Campaign, CampaignContact
 from app.orchestration.agent_config import resolve_active_agent_config
 from app.orchestration.session_manager import session_manager
-from app.orchestration.ultravox_call import build_template_context, resolve_call_greeting
+from app.orchestration.ultravox_call import (
+    build_caller_memory_context,
+    build_template_context,
+    resolve_call_greeting,
+)
 from app.services.monitoring_service import monitoring_service
 from app.services.ultravox_agent_sync import (
     ensure_ultravox_agent_id,
@@ -114,6 +118,13 @@ async def create_ultravox_twilio_call(
         for key, value in (campaign_contact.custom_data or {}).items():
             if value is not None:
                 extra[key] = value
+
+    # Inject caller memory (returning-caller history, prior promises) into the prompt.
+    caller_context = await build_caller_memory_context(
+        db, caller_id, organization_id=org_id, agent_id=agent.id
+    )
+    if caller_context:
+        extra["callerContext"] = caller_context
 
     template_context = build_template_context(
         agent,

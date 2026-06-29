@@ -348,6 +348,8 @@ class WorkflowEngine:
             )
 
         if node.type == NodeType.SMS:
+            from app.services.sms_service import SmsService
+
             phone = (
                 node.config.get("to_phone")
                 or context.get("phone_number")
@@ -358,42 +360,13 @@ class WorkflowEngine:
             message = _render_template(raw_message, context)
             sms_status = "skipped"
             if phone:
-                try:
-                    from app.core.config import settings
-                    from twilio.rest import Client
-
-                    account_sid = settings.TWILIO_ACCOUNT_SID
-                    auth_token = settings.TWILIO_AUTH_TOKEN
-                    from_number = settings.TWILIO_PHONE_NUMBER
-                    if account_sid and auth_token and from_number:
-                        client = Client(account_sid, auth_token)
-                        twilio_msg = client.messages.create(
-                            body=message,
-                            from_=from_number,
-                            to=str(phone),
-                        )
-                        sms_status = "sent"
-                        sid = twilio_msg.sid
-                    else:
-                        sms_status = "simulated"
-                        sid = None
-                        logger.info(f"[workflow sms] simulated to={phone} msg={message[:60]}")
-                except Exception as exc:
-                    sms_status = "failed"
-                    sid = None
-                    logger.warning(f"[workflow sms] failed to={phone}: {exc}")
-
-                from app.models.workflow import SmsMessage
-                sms_row = SmsMessage(
+                result = SmsService(self.db).send_message(
+                    to_phone=str(phone),
+                    message=message,
                     workflow_instance_id=instance_meta.get("instance_id"),
                     organization_id=context.get("organization_id"),
-                    to_phone=str(phone),
-                    message_body=message,
-                    status=sms_status,
-                    provider_message_sid=sid,
                 )
-                self.db.add(sms_row)
-                self.db.commit()
+                sms_status = result.get("status", "failed")
 
             return StepResult(
                 status="continue",

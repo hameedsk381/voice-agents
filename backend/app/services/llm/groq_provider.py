@@ -11,9 +11,10 @@ from app.core.telemetry import get_tracer, persist_span
 _tracer = get_tracer("groq_llm")
 
 class GroqLLM(LLMProvider):
-    def __init__(self, api_key: str = None, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, api_key: str = None, model: str = "llama-3.3-70b-versatile", temperature: float = 0.7):
         self.api_key = api_key or settings.GROQ_API_KEY
         self.model = model
+        self.temperature = temperature
         if self.api_key:
             self.client = AsyncGroq(api_key=self.api_key)
         else:
@@ -32,12 +33,12 @@ class GroqLLM(LLMProvider):
             kwargs = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": 0.7,
+                "temperature": self.temperature,
             }
             if tools:
                 kwargs["tools"] = tools
                 kwargs["tool_choice"] = "auto"
-            
+
             response = await self.client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as e:

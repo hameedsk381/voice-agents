@@ -32,6 +32,34 @@ class AuditLog(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class DoNotCall(Base):
+    """Org-scoped do-not-call list — numbers that must never receive outbound calls."""
+    __tablename__ = "do_not_call"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, index=True, nullable=True)
+    phone = Column(String, index=True, nullable=False)
+    source = Column(String, nullable=True)  # manual | inbound_optout | ncpr | complaint
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PilotApplication(Base):
+    """Inbound pilot-program applications from the marketing site."""
+    __tablename__ = "pilot_applications"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    company = Column(String, nullable=False)
+    industry = Column(String, nullable=True)
+    volume = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
+    email = Column(String, nullable=False)
+    use_case = Column(Text, nullable=True)
+    status = Column(String, default="new")  # new | contacted | scoping | accepted | rejected
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class RegulatoryPolicy(Base):
     """Sets of rules applied to sessions based on industry/region."""
     __tablename__ = "regulatory_policies"

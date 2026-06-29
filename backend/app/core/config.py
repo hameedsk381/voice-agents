@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # API Keys (optional)
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+
+    # High-stakes "reasoning" LLM for compliance auditing and outcome classification.
+    # provider: auto | anthropic | openai | groq. "auto" prefers Claude when an
+    # Anthropic key is set, otherwise falls back to Groq (llama-3.3-70b).
+    REASONING_LLM_PROVIDER: Literal["auto", "anthropic", "openai", "groq"] = "auto"
+    REASONING_LLM_MODEL: Optional[str] = None  # explicit model override
     DEEPGRAM_API_KEY: Optional[str] = None
     STT_PROVIDER: Literal["mock", "deepgram"] = "mock"
     DEFAULT_STT_CONFIDENCE: float = 0.85
@@ -102,6 +109,29 @@ class Settings(BaseSettings):
     WHATSAPP_RATE_LIMIT_PER_HOUR: int = 0  # 0 = unlimited
     WHATSAPP_OPTIN_REQUIRED: bool = True
     WHATSAPP_TEMPLATE_NAMESPACE: Optional[str] = None
+
+    # Demo (unauthenticated live call — set to a real agent UUID in production)
+    DEMO_AGENT_ID: Optional[str] = None
+
+    # India telephony compliance (TRAI / TCCCPR / DLT)
+    # AI-disclosure: spoken at the start of every call. {company} is substituted.
+    AI_DISCLOSURE_REQUIRED: bool = True
+    AI_DISCLOSURE_TEMPLATE: str = "This is an AI assistant calling on behalf of {company}."
+    # Permitted commercial calling window in IST (24h). TCCCPR restricts to 9am–9pm.
+    CALLING_HOURS_START: int = 9
+    CALLING_HOURS_END: int = 21
+    CALLING_HOURS_ENFORCED: bool = True
+    # When true, refuse outbound from numbers whose dlt_status != "registered".
+    DLT_ENFORCEMENT: bool = False
+    # Razorpay (collections payment links)
+    RAZORPAY_KEY_ID: Optional[str] = None
+    RAZORPAY_KEY_SECRET: Optional[str] = None
+    RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
+
+    # SMS (workflow automation)
+    SMS_RATE_LIMIT_PER_HOUR: int = 0  # 0 = unlimited
+    SMS_OPTIN_REQUIRED: bool = True
+    SMS_WEBHOOK_URL: Optional[str] = None
 
     # Email (workflow automation)
     SMTP_HOST: Optional[str] = None

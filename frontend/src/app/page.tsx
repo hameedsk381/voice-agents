@@ -4,6 +4,7 @@ import LogoWall from "@/components/LogoWall";
 import Stats from "@/components/Stats";
 import HowItWorks from "@/components/HowItWorks";
 import Features from "@/components/Features";
+import LiveDemo from "@/components/LiveDemo";
 import Testimonials from "@/components/Testimonials";
 import Pricing from "@/components/Pricing";
 import FAQ from "@/components/FAQ";
@@ -20,6 +21,7 @@ export default function Home() {
         <Stats />
         <HowItWorks />
         <Features />
+        <LiveDemo />
         <Testimonials />
         <Pricing />
         <FAQ />

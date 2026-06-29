@@ -33,7 +33,35 @@ DEFAULT_RATE_CARDS: Dict[str, Dict[str, dict]] = {
         "llm_tokens": {"unit": "tokens", "price_per_unit": 0.0000015, "included_units": float("inf")},
         "messages_sent": {"unit": "count", "price_per_unit": 0.008, "included_units": float("inf")},
     },
+    # Pilot tier — fully free for the first 30 days of an early-access engagement.
+    # Outcome metrics are tracked but not charged.
+    "pilot": {
+        "call_minutes": {"unit": "minutes", "price_per_unit": 0, "included_units": float("inf")},
+        "messages_sent": {"unit": "count", "price_per_unit": 0, "included_units": float("inf")},
+        "promise_to_pay_captured": {"unit": "count", "price_per_unit": 0, "included_units": float("inf")},
+        "payment_collected": {"unit": "count", "price_per_unit": 0, "included_units": float("inf")},
+        "qualified_lead": {"unit": "count", "price_per_unit": 0, "included_units": float("inf")},
+        "appointment_booked": {"unit": "count", "price_per_unit": 0, "included_units": float("inf")},
+    },
+    # Outcome tier — the commercial model. Prices are in INR per outcome.
+    # Minutes are billed at ₹0: the customer pays only for results.
+    "outcome": {
+        "call_minutes": {"unit": "minutes", "price_per_unit": 0, "included_units": float("inf")},
+        "messages_sent": {"unit": "count", "price_per_unit": 0, "included_units": float("inf")},
+        "promise_to_pay_captured": {"unit": "count", "price_per_unit": 20, "included_units": 0},
+        "payment_collected": {"unit": "count", "price_per_unit": 50, "included_units": 0},
+        "qualified_lead": {"unit": "count", "price_per_unit": 30, "included_units": 0},
+        "appointment_booked": {"unit": "count", "price_per_unit": 15, "included_units": 0},
+    },
 }
+
+# Metrics that represent a billable business outcome (vs. raw infrastructure usage).
+OUTCOME_METRICS = [
+    "promise_to_pay_captured",
+    "payment_collected",
+    "qualified_lead",
+    "appointment_booked",
+]
 
 
 class MeteringService:
@@ -121,6 +149,37 @@ class MeteringService:
             "plan": plan,
             "total_cost": round(total, 6),
             "breakdown": breakdown,
+        }
+
+    def compute_outcome_billing(
+        self,
+        plan: str,
+        usage_summary: Dict[str, float],
+    ) -> Dict[str, Any]:
+        """Compute ₹ owed for billable outcomes given a usage summary.
+
+        usage_summary maps metric -> total quantity for the period.
+        Returns per-outcome line items and a total (in INR for the outcome tier).
+        """
+        rate_card = self.get_rate_card(plan)
+        line_items = []
+        total = 0.0
+        for metric in OUTCOME_METRICS:
+            quantity = usage_summary.get(metric, 0) or 0
+            config = rate_card.get(metric, {})
+            price = config.get("price_per_unit", 0) or 0
+            amount = quantity * price
+            line_items.append({
+                "metric": metric,
+                "quantity": quantity,
+                "price_per_unit": price,
+                "amount": round(amount, 2),
+            })
+            total += amount
+        return {
+            "currency": "INR",
+            "line_items": line_items,
+            "total": round(total, 2),
         }
 
     def estimate_call_cost(

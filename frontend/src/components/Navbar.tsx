@@ -1,13 +1,22 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import ThemeToggle from "@/components/ThemeToggle";
 import { LogoFull } from "@/components/Logo";
+import { ChevronDown } from "lucide-react";
+
+const SOLUTIONS = [
+  { label: "Real Estate", href: "/real-estate", desc: "Lead qualification & site visits" },
+  { label: "Healthcare", href: "/healthcare", desc: "Appointment reminders & booking" },
+  { label: "Collections", href: "/collections", desc: "EMI recovery & negotiation" },
+];
 
 export default function Navbar() {
   const { isAuthenticated } = useAuth();
+  const [solutionsOpen, setSolutionsOpen] = useState(false);
 
   return (
     <motion.nav
@@ -38,6 +47,39 @@ export default function Navbar() {
               <span className="absolute bottom-1 left-3.5 right-3.5 h-[1.5px] bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-200" />
             </Link>
           ))}
+
+          {/* Solutions dropdown */}
+          <div className="relative" onMouseEnter={() => setSolutionsOpen(true)} onMouseLeave={() => setSolutionsOpen(false)}>
+            <button
+              type="button"
+              className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+            >
+              Solutions
+              <ChevronDown className={`size-3 transition-transform duration-200 ${solutionsOpen ? "rotate-180" : ""}`} />
+            </button>
+            <AnimatePresence>
+              {solutionsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800 shadow-xl shadow-black/10 overflow-hidden"
+                >
+                  {SOLUTIONS.map((s) => (
+                    <Link
+                      key={s.href}
+                      href={s.href}
+                      className="flex flex-col px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors border-b border-zinc-100 dark:border-zinc-800/60 last:border-0"
+                    >
+                      <span className="text-xs font-bold text-foreground">{s.label}</span>
+                      <span className="text-[10px] text-muted-foreground mt-0.5">{s.desc}</span>
+                    </Link>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Right side actions */}

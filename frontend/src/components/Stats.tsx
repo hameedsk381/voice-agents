@@ -4,38 +4,50 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 import { Activity, ShieldCheck, Languages, Zap } from "lucide-react";
 
-const stats = [
+type Stat = {
+  label: string;
+  value: number | boolean;
+  icon: typeof Activity;
+  color: "primary" | "accent";
+  desc: string;
+  suffix?: string;
+  title?: string;
+  decimal?: boolean;
+  isStatic?: boolean;
+};
+
+const stats: Stat[] = [
   {
-    label: "Supported Languages",
-    value: 12,
-    suffix: "",
-    icon: Languages,
-    color: "primary",
-    desc: "Fluent Indian language models.",
-  },
-  {
-    label: "Real-Time Architecture",
-    value: true,
-    icon: Zap,
-    color: "accent",
-    title: "Sub-second voice pipeline",
-    desc: "STT → LLM → TTS in a single API call.",
-  },
-  {
-    label: "Built for India",
-    value: true,
+    label: "Payment Recovery Rate",
+    value: 3,
+    suffix: "×",
     icon: Activity,
     color: "primary",
-    title: "DPDP Act 2023 Compliant",
-    desc: "Indian language-native platform with PII redaction.",
+    desc: "Collections teams recover 3× more EMIs vs. manual callers.",
   },
   {
-    label: "Cloud-Native",
+    label: "Reduction in No-Shows",
+    value: 60,
+    suffix: "%",
+    icon: Zap,
+    color: "accent",
+    desc: "Clinics and consultants see 60% fewer missed appointments.",
+  },
+  {
+    label: "Cost Per Automated Call",
     value: true,
     icon: ShieldCheck,
+    color: "primary",
+    title: "₹0 vs. ₹450 Agent Cost",
+    desc: "Replace per-call agent costs with a flat monthly subscription.",
+  },
+  {
+    label: "Agent Response Latency",
+    value: true,
+    icon: Languages,
     color: "accent",
-    title: "Kubernetes-Native Deployment",
-    desc: "Auto-scaling infrastructure managed via Helm.",
+    title: "<2s End-to-End",
+    desc: "STT → LLM → TTS in under 2 seconds. Natural conversation pace.",
     isStatic: true,
   },
 ];
@@ -97,10 +109,10 @@ export default function Stats() {
             PERFORMANCE AT SCALE
           </span>
           <h2 className="font-display font-black text-3xl sm:text-4xl tracking-tight text-foreground uppercase">
-            BY THE NUMBERS
+            REAL BUSINESS OUTCOMES
           </h2>
           <p className="text-muted-foreground text-sm sm:text-base max-w-xl mx-auto mt-4 leading-relaxed">
-            High-volume operations teams trust Voise AI to automate calls reliably, securely, and cost-effectively.
+            Collections teams, clinics, and sales floors use Voise AI to measurably recover more revenue and save hours every day.
           </p>
         </motion.div>
 

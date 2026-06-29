@@ -48,6 +48,9 @@ class SessionManager:
 
     def _ultravox_call_key(self, ultravox_call_id: str) -> str:
         return f"ultravox_call:{ultravox_call_id}"
+
+    def _history_key(self, session_id: str) -> str:
+        return f"session:{session_id}:history"
     
     async def create_session(
         self, 
@@ -115,27 +118,46 @@ class SessionManager:
         return session
     
     async def add_to_history(self, session_id: str, role: str, content: str) -> bool:
-        """Add a message to session history."""
-        session = await self.get_session(session_id)
-        if not session:
-            return False
-        
-        session["history"].append({
+        """Append a message to session history.
+
+        History is stored in a dedicated Redis list (O(1) append) instead of
+        rewriting the full session blob on every turn.
+        """
+        await self.connect()
+        entry = {
             "role": role,
             "content": content,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-        
-        await self.update_session(session_id, {"history": session["history"]})
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        key = self._history_key(session_id)
+        await self.redis.rpush(key, json.dumps(entry))
+        await self.redis.expire(key, self.session_ttl)
         return True
-    
+
     async def get_history(self, session_id: str) -> List[Dict[str, str]]:
-        """Get conversation history for a session."""
-        session = await self.get_session(session_id)
-        if session:
-            # Return in format expected by LLM
-            return [{"role": h["role"], "content": h["content"]} for h in session["history"]]
-        return []
+        """Get conversation history for a session (role/content for the LLM)."""
+        await self.connect()
+        raw = await self.redis.lrange(self._history_key(session_id), 0, -1)
+        history: List[Dict[str, str]] = []
+        for item in raw:
+            try:
+                h = json.loads(item)
+                history.append({"role": h["role"], "content": h["content"]})
+            except (json.JSONDecodeError, KeyError):
+                continue
+        return history
+
+    async def get_full_history(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get full history entries including timestamps."""
+        await self.connect()
+        raw = await self.redis.lrange(self._history_key(session_id), 0, -1)
+        out: List[Dict[str, Any]] = []
+        for item in raw:
+            try:
+                out.append(json.loads(item))
+            except json.JSONDecodeError:
+                continue
+        return out
 
     async def set_floor_owner(self, session_id: str, owner: str) -> bool:
         """Track who may speak: user | agent | human."""

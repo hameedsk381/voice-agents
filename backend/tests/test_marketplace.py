@@ -12,7 +12,7 @@ def service():
 class TestGetTemplates:
     def test_returns_all_templates(self, service):
         templates = service.get_templates()
-        assert len(templates) == 9
+        assert len(templates) == 10
         assert all(t["id"] for t in templates)
 
     def test_all_tool_refs_are_valid(self, service):
@@ -20,7 +20,7 @@ class TestGetTemplates:
             "verify_aadhaar", "verify_pan", "check_upi_payment",
             "lookup_pincode", "check_gst", "translate_to_hindi",
             "check_loan_emi", "schedule_callback", "transfer_to_human",
-            "search_knowledge_base",
+            "search_knowledge_base", "record_promise_to_pay", "send_payment_link",
         }
         for t in service.get_templates():
             for tool in t["recommended_tools"]:

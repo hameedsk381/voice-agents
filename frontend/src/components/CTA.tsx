@@ -32,9 +32,9 @@ export default function CTA() {
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           className="font-display font-black text-4xl sm:text-5xl leading-tight text-foreground mb-6 uppercase"
         >
-          READY TO AUTOMATE YOUR <br />
+          SEE IT HANDLE A <br />
           <span className="text-primary">
-            OUTBOUND CALLS?
+            REAL CALL LIVE.
           </span>
         </motion.h2>
 
@@ -45,8 +45,8 @@ export default function CTA() {
           transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
           className="text-muted-foreground text-sm sm:text-base mb-10 max-w-xl mx-auto leading-relaxed font-medium"
         >
-          Deploy your first autonomous conversational voice agent in less than 5 minutes.
-          Enjoy a risk-free trial including 50 call minutes — no credit card required.
+          Watch a Voise AI agent collect a payment, qualify a lead, or confirm an appointment —
+          in your industry, in your language. No setup required.
         </motion.p>
 
         <motion.div
@@ -54,13 +54,20 @@ export default function CTA() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, delay: 0.2 }}
+          className="flex flex-col sm:flex-row items-center justify-center gap-4"
         >
           <button
             onClick={() => router.push('/register')}
             className="inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-gradient-to-r from-primary to-cyan-500 text-primary-foreground font-extrabold text-sm hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 cursor-pointer"
           >
-            Start Free Trial
+            See a Live Demo
             <ArrowRight className="size-4" />
+          </button>
+          <button
+            onClick={() => router.push('/register')}
+            className="inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl border border-border text-foreground font-bold text-sm hover:bg-muted/50 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            Start Free Trial
           </button>
         </motion.div>
 
@@ -71,7 +78,7 @@ export default function CTA() {
           transition={{ duration: 0.8, delay: 0.3 }}
           className="mt-6 text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest"
         >
-          Instant deployment — No credit card required — Cancel anytime
+          No credit card required — 50 free call minutes — Cancel anytime
         </motion.p>
       </div>
     </section>

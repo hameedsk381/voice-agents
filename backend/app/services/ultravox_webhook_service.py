@@ -117,7 +117,7 @@ class UltravoxWebhookService:
 
         transcript = _messages_to_transcript(call.get("messages") or [])
         if not transcript:
-            transcript = session.get("history") or []
+            transcript = await session_manager.get_history(session_id)
 
         metadata = session.get("metadata") or {}
         end_reason = call.get("endReason") or call.get("endedReason") or "ultravox_ended"
@@ -146,6 +146,30 @@ class UltravoxWebhookService:
 
         analytics = AnalyticsService(self.db)
         call_log = await analytics.log_call_completion(session_data, agent=agent)
+
+        # Collections: a promise-to-pay captured mid-call deterministically marks
+        # the call a success and records a billable outcome (overrides LLM classification).
+        collections_outcome = metadata.get("collections_outcome")
+        if call_log and collections_outcome and collections_outcome.get("type") == "promise_to_pay":
+            call_log.outcome = "SUCCESS"
+            call_log.outcome_reason = "promise_to_pay"
+            meta = dict(call_log.metadata_json or {})
+            meta["promise_to_pay"] = collections_outcome
+            call_log.metadata_json = meta
+            self.db.commit()
+            try:
+                from app.services.usage_service import UsageService
+                UsageService(self.db).record_usage(
+                    organization_id=metadata.get("org_id"),
+                    metric="promise_to_pay_captured",
+                    quantity=1,
+                    unit="count",
+                    session_id=session_id,
+                    agent_id=session["agent_id"],
+                    metadata=collections_outcome,
+                )
+            except Exception as exc:
+                logger.error(f"Failed to record promise_to_pay usage: {exc}")
 
         contact_id = metadata.get("campaign_contact_id")
         if contact_id:

@@ -9,7 +9,7 @@ const features = [
     title: "Real-Time Outbound AI Agents",
     tagline: "AUTONOMOUS VOICE",
     description:
-      "Initiate high-volume outbound campaigns with intelligent, fluent conversational bots. Capable of handling complex objectives, overcoming active resistance, and scheduling CRM followups completely on autopilot.",
+      "Recover 3× more payments and qualify leads at scale — without adding headcount. Agents handle complex objections, negotiate flexibly, and log every outcome to your CRM on autopilot.",
     span: "lg:col-span-2 lg:row-span-1",
     color: "primary",
   },
@@ -18,16 +18,16 @@ const features = [
     title: "Smart Payment Reminders",
     tagline: "DEBT COLLECTION",
     description:
-      "Drastically improve collections and cashflow with empathetic yet persistent AI voice reminders, supporting flexible installment scheduling and instant confirmation.",
+      "Lift promise-to-pay rates from under 20% to over 45%. Empathetic yet persistent reminders offer installment splits and deadline extensions — closing more recoveries per call.",
     span: "lg:col-span-1",
     color: "accent",
   },
   {
     icon: Sparkles,
     title: "Instant Lead Pre-Screening",
-    tagline: "LEAD QUANTIFICATION",
+    tagline: "LEAD QUALIFICATION",
     description:
-      "Screen and qualify incoming inbound or newly acquired leads autonomously. Capture buyer intents, evaluate budget thresholds, and book calendar times instantly.",
+      "Cut sales team workload by 80%. Agents capture intent, budget, and timeline before a human ever picks up — so your closers only talk to qualified, ready-to-buy prospects.",
     span: "lg:col-span-1",
     color: "accent",
   },
@@ -36,7 +36,7 @@ const features = [
     title: "Automated Appointment Scheduling",
     tagline: "CALENDAR AUTOMATION",
     description:
-       "Confirm, rebook, or clear appointments conversationally with zero wait times. Integrated webhooks connect directly to your calendar system.",
+      "Eliminate 60% of no-shows. Agents confirm, reschedule, or cancel appointments conversationally and sync directly with your calendar — no hold music, no missed slots.",
     span: "lg:col-span-1",
     color: "primary",
   },
@@ -45,7 +45,7 @@ const features = [
     title: "12 Native Indian Languages",
     tagline: "NATIVE DIVERSITY",
     description:
-      "Break geographic barriers with direct models fluent in Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese, and English. Supports regional accents across India.",
+      "Reach customers in the language they trust. Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese, and English — with regional accent support across every state.",
     span: "lg:col-span-2 lg:row-span-1",
     color: "primary",
   },
@@ -54,7 +54,7 @@ const features = [
     title: "Enterprise Security & Consent",
     tagline: "COMPLIANCE BUILT-IN",
     description:
-      "Fully compliant with India's DPDP Act 2023. Featuring end-to-end encrypted logs, PII-aware data storage redactors, and active consent verification modules.",
+      "Ship to NBFC, healthcare, and enterprise clients with confidence. DPDP Act 2023 compliant with end-to-end encrypted logs, PII redaction, and active consent verification built in.",
     span: "lg:col-span-1",
     color: "accent",
   },

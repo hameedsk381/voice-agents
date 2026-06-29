@@ -11,12 +11,15 @@ from starlette.websockets import WebSocketState
 from twilio.twiml.voice_response import VoiceResponse
 from loguru import logger
 
-from app.orchestration.tool_executor import execute_tool
 from app.orchestration.ultravox_twilio import (
     ULTRAVOX_DATA_CONNECTION_CONTEXT,
     create_ultravox_twilio_call,
 )
-from app.orchestration.websocket_proxy import _run_ultravox_compliance_audit
+from app.orchestration.ultravox_events import (
+    UltravoxTranscriptTracker,
+    parse_tool_invocation,
+    run_ultravox_tool,
+)
 from app.core import database
 from app.core.config import settings
 from app.models import agent as models
@@ -273,9 +276,7 @@ async def ultravox_data_connection(
     agent_id = context.get("agent_id")
     org_id = context.get("organization_id")
 
-    transcript_buffers: Dict[tuple, str] = {}
-    unanswered_user_turns: List[str] = []
-    turn_count = 0
+    tracker = UltravoxTranscriptTracker(agent_id, org_id, state_name="ULTRAVOX_TWILIO")
     end_reason = "ultravox_data_connection_closed"
 
     try:
@@ -297,48 +298,7 @@ async def ultravox_data_connection(
                 continue
 
             if event_type == "transcript":
-                role = event.get("role", "agent")
-                ordinal = int(event.get("ordinal") or 0)
-                key = (role, ordinal)
-
-                delta = event.get("delta") or ""
-                full_text = event.get("text")
-                is_final = bool(event.get("final"))
-
-                if full_text is not None:
-                    transcript_buffers[key] = full_text
-                elif delta:
-                    transcript_buffers[key] = transcript_buffers.get(key, "") + delta
-
-                if is_final and session_id:
-                    final_text = transcript_buffers.pop(key, full_text or delta).strip()
-                    if final_text:
-                        mapped_role = "assistant" if role == "agent" else "user"
-                        await session_manager.add_to_history(session_id, mapped_role, final_text)
-                        await monitoring_service.broadcast_event(
-                            session_id,
-                            "transcription",
-                            {"text": final_text, "role": mapped_role},
-                        )
-
-                        if mapped_role == "user":
-                            unanswered_user_turns.append(final_text)
-                        elif unanswered_user_turns and agent_id:
-                            user_turn_for_audit = unanswered_user_turns.pop(0)
-                            turn_count += 1
-                            try:
-                                await _run_ultravox_compliance_audit(
-                                    db=db,
-                                    session_id=session_id,
-                                    agent_id=agent_id,
-                                    organization_id=org_id,
-                                    turn_index=turn_count,
-                                    user_input=user_turn_for_audit,
-                                    ai_response=final_text,
-                                    state_name="ULTRAVOX_TWILIO",
-                                )
-                            except Exception as audit_error:
-                                logger.error(f"Ultravox Twilio compliance audit failed: {audit_error}")
+                await tracker.handle(event, session_id)
                 continue
 
             if event_type == "state":
@@ -351,12 +311,7 @@ async def ultravox_data_connection(
                 continue
 
             if event_type in {"data_connection_tool_invocation", "client_tool_invocation"}:
-                tool_name = event.get("toolName") or event.get("name")
-                invocation_id = event.get("invocationId") or event.get("id")
-                tool_arguments = event.get("parameters") or {}
-                if not isinstance(tool_arguments, dict):
-                    tool_arguments = {}
-
+                tool_name, invocation_id, tool_arguments = parse_tool_invocation(event)
                 result_message_type = (
                     "data_connection_tool_result"
                     if event_type == "data_connection_tool_invocation"
@@ -386,66 +341,29 @@ async def ultravox_data_connection(
                     )
                     continue
 
-                try:
-                    result_dict = await execute_tool(
-                        tool_name=tool_name,
-                        arguments=tool_arguments,
-                        db=db,
-                        agent_id=agent_id,
-                        session_id=session_id,
-                    )
-                    result_text = result_dict.get("result", "")
-                    confidence = result_dict.get("confidence", 1.0)
-                    is_error = result_dict.get("error", False)
-
-                    payload = {
-                        "type": result_message_type,
-                        "invocationId": invocation_id,
-                        "result": result_text,
-                        "responseType": "tool-response",
-                    }
-                    if is_error:
-                        payload["errorType"] = "implementation-error"
-                        payload["errorMessage"] = result_text
-
-                    await websocket.send_json(payload)
-
-                    if session_id:
-                        await monitoring_service.broadcast_event(
-                            session_id,
-                            "tool_result",
-                            {
-                                "name": tool_name,
-                                "arguments": tool_arguments,
-                                "result": result_text,
-                                "confidence": confidence,
-                                "provider": "ultravox_twilio",
-                                "error": is_error,
-                            },
-                        )
-                except Exception as tool_error:
-                    logger.error(f"Ultravox Twilio tool execution failed ({tool_name}): {tool_error}")
-                    await websocket.send_json(
+                payload, meta = await run_ultravox_tool(
+                    tool_name=tool_name,
+                    arguments=tool_arguments,
+                    invocation_id=invocation_id,
+                    db=db,
+                    agent_id=agent_id,
+                    session_id=session_id,
+                    result_message_type=result_message_type,
+                )
+                await websocket.send_json(payload)
+                if session_id:
+                    await monitoring_service.broadcast_event(
+                        session_id,
+                        "tool_result",
                         {
-                            "type": result_message_type,
-                            "invocationId": invocation_id,
-                            "responseType": "tool-response",
-                            "errorType": "implementation-error",
-                            "errorMessage": str(tool_error),
-                        }
+                            "name": meta["name"],
+                            "arguments": meta["arguments"],
+                            "result": meta["result"],
+                            "confidence": meta.get("confidence"),
+                            "provider": "ultravox_twilio",
+                            "error": meta["error"],
+                        },
                     )
-                    if session_id:
-                        await monitoring_service.broadcast_event(
-                            session_id,
-                            "tool_result",
-                            {
-                                "name": tool_name,
-                                "arguments": tool_arguments,
-                                "result": str(tool_error),
-                                "provider": "ultravox_twilio",
-                                "error": True,
-                            },
-                        )
                 continue
 
             if event_type == "call_event":
@@ -543,6 +461,18 @@ async def make_outbound_call(
         reason = call_check.get("reason", "limit_exceeded")
         logger.warning(f"Call blocked for org {agent.organization_id}: {reason}")
         return {"status": "error", "error": f"Cannot initiate call — {reason.replace('_', ' ')}"}
+
+    # India telephony compliance gate (DND / consent / calling hours / DLT)
+    from app.services.call_compliance_service import CallComplianceService
+    compliance = CallComplianceService(db)
+    allowed, c_reason = compliance.check_call_allowed(
+        to_number,
+        organization_id=agent.organization_id,
+        from_number=from_number or settings.TWILIO_PHONE_NUMBER,
+    )
+    if not allowed:
+        logger.warning(f"Outbound call to {to_number} blocked by compliance: {c_reason}")
+        return {"status": "error", "error": f"Call not permitted — {c_reason.replace('_', ' ')}"}
 
     if _use_ultravox_runtime():
         from_e164 = (

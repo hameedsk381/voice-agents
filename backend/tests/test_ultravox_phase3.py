@@ -129,8 +129,11 @@ def test_merge_call_overrides():
 def test_resolve_call_greeting_campaign_wins():
     agent = MagicMock()
     agent.config = {"greeting": "Agent hi"}
+    agent.language = "en-US"
     greeting = resolve_call_greeting(agent, campaign_call_config={"greeting": "Campaign hi"})
-    assert greeting == "Campaign hi"
+    # Campaign greeting wins over the agent default; the AI-disclosure is prepended.
+    assert "Campaign hi" in greeting
+    assert "Agent hi" not in greeting
 
 
 def test_build_call_callbacks_when_enabled():
@@ -202,6 +205,10 @@ async def test_webhook_handle_call_ended():
     ), patch(
         "app.services.ultravox_webhook_service.session_manager.update_session",
         new_callable=AsyncMock,
+    ), patch(
+        "app.services.ultravox_webhook_service.session_manager.get_history",
+        new_callable=AsyncMock,
+        return_value=[],
     ), patch(
         "app.services.ultravox_webhook_service.monitoring_service.broadcast_event",
         new_callable=AsyncMock,
