@@ -46,7 +46,8 @@ class RazorpayService:
         notes = notes or {}
 
         if not self.is_configured or not self._client:
-            return self._mock_link(amount_rupees, notes)
+            logger.error("Razorpay not configured; cannot create payment link")
+            return {"status": "failed", "error": "razorpay_not_configured", "short_url": None, "amount": amount_rupees}
 
         try:
             payload: Dict[str, Any] = {
@@ -76,7 +77,7 @@ class RazorpayService:
             }
         except Exception as exc:
             logger.error(f"Razorpay payment link creation failed: {exc}")
-            return self._mock_link(amount_rupees, notes, error=str(exc))
+            return {"status": "failed", "error": str(exc), "short_url": None, "amount": amount_rupees}
 
     def verify_webhook_signature(self, body: bytes, signature: str) -> bool:
         """Verify a Razorpay webhook signature. Returns False if secret unset."""
@@ -92,14 +93,3 @@ class RazorpayService:
             logger.error(f"Razorpay webhook signature verification error: {exc}")
             return False
 
-    def _mock_link(self, amount_rupees: float, notes: Dict[str, Any], error: Optional[str] = None) -> Dict[str, Any]:
-        mock_id = f"plink_mock_{abs(hash(str(notes))) % 10_000_000}"
-        logger.info(f"[MOCK Razorpay] link {mock_id} for ₹{amount_rupees}")
-        return {
-            "id": mock_id,
-            "short_url": f"https://rzp.io/i/{mock_id}",
-            "status": "created",
-            "amount": amount_rupees,
-            "mock": True,
-            **({"error": error} if error else {}),
-        }

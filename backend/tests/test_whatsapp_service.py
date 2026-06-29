@@ -108,8 +108,8 @@ class TestConsentTracker:
 # ─── WhatsAppService — send_message ──────────────────────────────────
 
 class TestWhatsAppServiceSend:
-    def test_send_message_mock_fallback(self, mock_db):
-        """Without Twilio creds, send_message should use mock fallback."""
+    def test_send_message_not_configured_fails(self, mock_db):
+        """Without Twilio creds, send_message fails loudly (no fake success)."""
         with patch("app.services.whatsapp_service.settings") as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = ""
             mock_settings.TWILIO_AUTH_TOKEN = ""
@@ -119,7 +119,8 @@ class TestWhatsAppServiceSend:
             mock_settings.WHATSAPP_RATE_LIMIT_PER_HOUR = 0
             svc = WhatsAppService(db=mock_db)
             result = svc.send_message("+911111111111", "Hello")
-        assert result.get("status") in ("mocked",)
+        assert result.get("status") == "failed"
+        assert result.get("error") == "whatsapp_not_configured"
 
     def test_send_message_twilio_real(self, mock_db):
         """With Twilio creds, should call the Twilio API."""
@@ -161,7 +162,7 @@ class TestWhatsAppServiceSend:
                 "Dear Raj, your payment is due.",
                 template_name="payment_reminder",
             )
-        assert result.get("status") in ("mocked",)
+        assert result.get("status") == "failed"
 
     def test_send_message_consent_blocked(self, mock_db):
         """Should refuse to send when opt-in required and not opted in."""

@@ -26,10 +26,10 @@ class GroqLLM(LLMProvider):
         msg = ""
         try:
             if not self.client:
-                return f"Mock Groq Response: {prompt}"
+                raise RuntimeError("Groq LLM not configured: set GROQ_API_KEY")
 
             messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
-            
+
             kwargs = {
                 "model": self.model,
                 "messages": messages,
@@ -61,7 +61,7 @@ class GroqLLM(LLMProvider):
         t0 = time.perf_counter()
         try:
             if not self.client:
-                return f"Mock response to '{prompt}' (no tools in mock)", None
+                raise RuntimeError("Groq LLM not configured: set GROQ_API_KEY")
 
             messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
             
@@ -104,11 +104,7 @@ class GroqLLM(LLMProvider):
         tokens = 0
         try:
             if not self.client:
-                mock_resp = f"This is a simulated Groq response to '{prompt}'."
-                for word in mock_resp.split(" "):
-                    yield word + " "
-                    await asyncio.sleep(0.05)
-                return
+                raise RuntimeError("Groq LLM not configured: set GROQ_API_KEY")
 
             messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
             

@@ -26,7 +26,7 @@ TEMPLATES: List[Dict[str, Any]] = [
         ),
         "language": "hi-IN",
         "recommended_tools": [
-            "verify_aadhaar", "check_loan_emi", "record_promise_to_pay",
+            "check_loan_emi", "record_promise_to_pay",
             "send_payment_link", "schedule_callback", "transfer_to_human",
         ],
         "goals": ["Capture a promise-to-pay", "Collect payment via link", "Preserve customer relationship"],

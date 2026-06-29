@@ -103,6 +103,18 @@ async def execute_tool(
 
     tool = AVAILABLE_TOOLS[tool_name]
 
+    # Gate: simulated tools (fake/canned data) are refused unless explicitly enabled.
+    from app.core.config import settings
+    if getattr(tool, "simulated", False) and not settings.ALLOW_SIMULATED_TOOLS:
+        logger.warning(f"Refused simulated tool '{tool_name}' (ALLOW_SIMULATED_TOOLS is False)")
+        return {
+            "name": tool_name,
+            "result": f"The '{tool_name}' tool is not available — it returns simulated data and is disabled.",
+            "confidence": 1.0,
+            "metadata": {"simulated_tool_disabled": True},
+            "error": True,
+        }
+
     # Precondition: Validate arguments against schema
     is_valid, error_msg = validate_arguments(tool, arguments)
     if not is_valid:

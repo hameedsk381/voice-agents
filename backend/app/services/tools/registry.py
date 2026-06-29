@@ -5,6 +5,7 @@ from .base import BaseTool, ToolResult
 
 class VerifyAadhaarTool(BaseTool):
     name = "verify_aadhaar"
+    simulated = True
     description = "Verify the last 4 digits of an Aadhaar number against the registered mobile number for identity confirmation."
     parameters = {
         "type": "object",
@@ -45,6 +46,7 @@ class VerifyAadhaarTool(BaseTool):
 
 class VerifyPANCardTool(BaseTool):
     name = "verify_pan"
+    simulated = True
     description = "Verify an Indian PAN card number and check its validity status with the income tax department."
     parameters = {
         "type": "object",
@@ -75,6 +77,7 @@ class VerifyPANCardTool(BaseTool):
 
 class CheckUPIPaymentTool(BaseTool):
     name = "check_upi_payment"
+    simulated = True
     description = "Check the status of a UPI transaction by UPI transaction ID or reference number."
     parameters = {
         "type": "object",
@@ -173,6 +176,7 @@ class LookupPincodeTool(BaseTool):
 
 class CheckGSTTool(BaseTool):
     name = "check_gst"
+    simulated = True
     description = "Look up GST registration details for an Indian business using its GSTIN."
     parameters = {
         "type": "object",
@@ -203,6 +207,7 @@ class CheckGSTTool(BaseTool):
 
 class TranslateToHindiTool(BaseTool):
     name = "translate_to_hindi"
+    simulated = True
     description = "Translate English text to Hindi in real-time for bilingual conversations with Indian users."
     parameters = {
         "type": "object",
@@ -469,7 +474,15 @@ class SendPaymentLinkTool(BaseTool):
         )
         short_url = link.get("short_url")
 
-        # Send the link over SMS (best-effort; mock when Twilio unconfigured).
+        # Payment provider not configured / failed — do not pretend a link was sent.
+        if not short_url:
+            return ToolResult(
+                result="I'm unable to generate a payment link right now. I'll have someone follow up with payment instructions.",
+                confidence=0.3,
+                metadata={"payment_link_error": link.get("error", "unavailable"), "amount": amount},
+            )
+
+        # Send the link over SMS.
         if customer_phone and short_url:
             try:
                 SmsService(_db).send_message(
@@ -514,9 +527,7 @@ AVAILABLE_TOOLS = {
 def get_collections_toolset() -> list:
     """Tools for a collections / EMI-recovery agent."""
     return [
-        "verify_aadhaar",
         "check_loan_emi",
-        "check_upi_payment",
         "record_promise_to_pay",
         "send_payment_link",
         "search_knowledge_base",
@@ -536,14 +547,15 @@ def get_tool_schemas(tool_names: list) -> list:
     return [tool.to_schema() for tool in tools]
 
 def get_default_toolset() -> list:
-    """Return the default set of tool names for new agents."""
+    """Return the default set of tool names for new agents.
+
+    Excludes simulated tools (Aadhaar/PAN/GST/UPI verification, machine
+    translation) so agents are not attached to fake-data tools by default.
+    """
     return [
-        "verify_aadhaar",
-        "verify_pan",
-        "check_upi_payment",
         "lookup_pincode",
-        "check_gst",
-        "translate_to_hindi",
         "check_loan_emi",
         "search_knowledge_base",
+        "schedule_callback",
+        "transfer_to_human",
     ]

@@ -188,7 +188,12 @@ class WhatsAppService:
 
         # Opt-in check
         if not self.is_configured:
-            return self._mock_send(to_phone, message, template_name, workflow_instance_id, organization_id)
+            logger.error(f"WhatsApp not sent to {to_phone}: Twilio is not configured")
+            self._write_audit(
+                to_phone, message, template_name, workflow_instance_id, organization_id,
+                status="failed", error="whatsapp_not_configured",
+            )
+            return {"status": "failed", "error": "whatsapp_not_configured"}
 
         can_send, reason = self.consent.can_send(to_phone)
         if not can_send:
@@ -266,7 +271,8 @@ class WhatsAppService:
         be used for proactive (business-initiated) messaging.
         """
         if not self.is_configured:
-            return {"status": "mock_created", "template_name": name}
+            logger.error(f"WhatsApp template '{name}' not created: Twilio is not configured")
+            return {"status": "failed", "error": "whatsapp_not_configured", "template_name": name}
 
         try:
             content = self.client.content.v1.contents.create(
@@ -401,11 +407,6 @@ class WhatsAppService:
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
-    def _mock_send(self, to_phone, message, template_name, workflow_instance_id, organization_id) -> Dict[str, Any]:
-        logger.info(f"[MOCK WHATSAPP] to={to_phone} msg='{message[:120]}'")
-        self._write_audit(to_phone, message, template_name, workflow_instance_id, organization_id, status="sent", provider_sid="mock_sid")
-        return {"status": "mocked", "message_sid": "mock_sid"}
-
     def _write_audit(
         self,
         to_phone: str,
@@ -428,7 +429,7 @@ class WhatsAppService:
             status=status,
             provider_message_sid=provider_sid,
             error_message=error,
-            sent_at=datetime.utcnow() if status in ("sent", "mocked") else None,
+            sent_at=datetime.utcnow() if status == "sent" else None,
         )
         self.db.add(entry)
         self.db.commit()

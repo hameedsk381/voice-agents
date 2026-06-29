@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     # Demo (unauthenticated live call — set to a real agent UUID in production)
     DEMO_AGENT_ID: Optional[str] = None
 
+    # When False (default), tools that return simulated/fake data (e.g. Aadhaar/PAN/GST
+    # verification, machine translation stubs) are disabled and refuse to run, so they
+    # can never be mistaken for real integrations. Set True only for demos.
+    ALLOW_SIMULATED_TOOLS: bool = False
+
     # India telephony compliance (TRAI / TCCCPR / DLT)
     # AI-disclosure: spoken at the start of every call. {company} is substituted.
     AI_DISCLOSURE_REQUIRED: bool = True

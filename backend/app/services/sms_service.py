@@ -123,7 +123,12 @@ class SmsService:
         organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         if not self.is_configured:
-            return self._mock_send(to_phone, message, workflow_instance_id, organization_id)
+            logger.error(f"SMS not sent to {to_phone}: Twilio is not configured")
+            self._write_audit(
+                to_phone, message, workflow_instance_id, organization_id,
+                status="failed", error="sms_not_configured",
+            )
+            return {"status": "failed", "error": "sms_not_configured"}
 
         can_send, reason = self.consent.can_send(to_phone)
         if not can_send:
@@ -206,11 +211,6 @@ class SmsService:
         self._write_audit(from_phone, body, status="received", provider_sid=message_sid)
         return {"action": "received", "from": from_phone, "body": body, "message_sid": message_sid}
 
-    def _mock_send(self, to_phone, message, workflow_instance_id, organization_id) -> Dict[str, Any]:
-        logger.info(f"[MOCK SMS] to={to_phone} msg='{message[:120]}'")
-        self._write_audit(to_phone, message, workflow_instance_id, organization_id, status="simulated", provider_sid="mock_sid")
-        return {"status": "simulated", "message_sid": "mock_sid"}
-
     def _write_audit(
         self,
         to_phone: str,
@@ -231,7 +231,7 @@ class SmsService:
             status=status,
             provider_message_sid=provider_sid,
             error_message=error,
-            sent_at=datetime.utcnow() if status in ("sent", "simulated") else None,
+            sent_at=datetime.utcnow() if status == "sent" else None,
         )
         self.db.add(entry)
         self.db.commit()

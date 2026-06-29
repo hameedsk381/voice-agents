@@ -17,7 +17,7 @@ class OpenAILLM(LLMProvider):
 
     async def generate_response(self, prompt: str, system_prompt: str, history: list) -> str:
         if not self.client:
-            return f"Mock response to: {prompt}"
+            raise RuntimeError("OpenAI LLM not configured: set OPENAI_API_KEY")
 
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
 
@@ -30,12 +30,7 @@ class OpenAILLM(LLMProvider):
 
     async def generate_stream(self, prompt: str, system_prompt: str, history: list) -> AsyncGenerator[str, None]:
         if not self.client:
-            # Mock Stream
-            mock_resp = f"This is a simulated AI response to '{prompt}' because no OpenAI Key was provided."
-            for word in mock_resp.split(" "):
-                yield word + " "
-                await asyncio.sleep(0.1)
-            return
+            raise RuntimeError("OpenAI LLM not configured: set OPENAI_API_KEY")
 
         messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": prompt}]
         

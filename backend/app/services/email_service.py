@@ -50,9 +50,9 @@ class EmailService:
                 status = "failed"
                 error = str(exc)
         else:
-            status = "simulated"
-            provider_id = f"sim-{uuid.uuid4().hex[:12]}"
-            logger.info(f"[email simulated] to={to_address} template={template} subject={subject}")
+            status = "failed"
+            error = "smtp_not_configured"
+            logger.error(f"Email not sent to {to_address}: SMTP is not configured")
 
         row = EmailMessage(
             id=str(uuid.uuid4()),
@@ -65,7 +65,7 @@ class EmailService:
             provider_id=provider_id,
             error_message=error,
             metadata_json={"context_keys": list(context.keys())},
-            sent_at=datetime.utcnow() if status in ("sent", "simulated") else None,
+            sent_at=datetime.utcnow() if status == "sent" else None,
         )
         self.db.add(row)
         self.db.commit()

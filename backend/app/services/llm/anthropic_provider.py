@@ -49,7 +49,7 @@ class AnthropicLLM(LLMProvider):
 
     async def generate_response(self, prompt: str, system_prompt: str, history: list) -> str:
         if not self.client:
-            return f"Mock Claude response to: {prompt}"
+            raise RuntimeError("Anthropic LLM not configured: set ANTHROPIC_API_KEY (and install the anthropic SDK)")
         try:
             resp = await self.client.messages.create(
                 model=self.model,
@@ -66,10 +66,7 @@ class AnthropicLLM(LLMProvider):
 
     async def generate_stream(self, prompt: str, system_prompt: str, history: list) -> AsyncGenerator[str, None]:
         if not self.client:
-            for word in f"Mock Claude stream for '{prompt}'.".split(" "):
-                yield word + " "
-                await asyncio.sleep(0.02)
-            return
+            raise RuntimeError("Anthropic LLM not configured: set ANTHROPIC_API_KEY (and install the anthropic SDK)")
         async with self.client.messages.stream(
             model=self.model,
             max_tokens=self.max_tokens,
