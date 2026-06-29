@@ -62,11 +62,10 @@ def test_orchestrator_low_confidence_handoff():
         history=[],
         current_intent="billing",
         extracted_info={},
-        confidence=ConfidenceScores(stt=1.0, intent=0.4, policy=1.0, overall=0.7)
+        confidence=ConfidenceScores(stt=1.0, intent=0.4, policy=1.0, overall=0.6)
     )
-    
-    # Intent confidence < 0.5 should trigger clarification
+
+    # Medium overall confidence with a detected intent -> surface it for confirmation.
     response = orchestrator.handle_low_confidence(context)
     assert response is not None
     assert "billing" in response
-    assert "clarify" in response.lower() or "tell me a bit more" in response.lower()

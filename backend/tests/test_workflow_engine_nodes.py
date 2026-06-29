@@ -57,16 +57,16 @@ class TestSmsNode:
         ctx = {"customer_name": "Raj", "phone_number": "+919999999999"}
         meta = {"instance_id": "inst-1"}
 
-        with patch("twilio.rest.Client") as mock_client, \
-             patch("app.core.config.settings") as mock_settings:
-            mock_client.return_value.messages.create.return_value.sid = "SM123"
-            mock_settings.TWILIO_ACCOUNT_SID = "ACxxx"
-            mock_settings.TWILIO_AUTH_TOKEN = "tok"
-            mock_settings.TWILIO_PHONE_NUMBER = "+18005551234"
+        with patch("app.services.sms_service.SmsService") as MockSms:
+            MockSms.return_value.send_message.return_value = {"status": "sent", "message_sid": "SM123"}
             result = await engine.execute_node(node, ctx, meta)
 
         assert result.status == "continue"
         assert result.context_patch.get("last_sms_status") == "sent"
+        # The node resolves the phone from context, renders the template, and delegates.
+        kwargs = MockSms.return_value.send_message.call_args.kwargs
+        assert kwargs["to_phone"] == "+919999999999"
+        assert "Raj" in kwargs["message"]
 
     @pytest.mark.asyncio
     async def test_sms_skipped_no_phone(self, mock_db):
@@ -90,15 +90,13 @@ class TestSmsNode:
         ctx: Dict[str, Any] = {}
         meta: Dict[str, Any] = {}
 
-        with patch("twilio.rest.Client") as mock_client, \
-             patch("app.core.config.settings") as mock_settings:
-            mock_client.return_value.messages.create.return_value.sid = "SM456"
-            mock_settings.TWILIO_ACCOUNT_SID = "ACxxx"
-            mock_settings.TWILIO_AUTH_TOKEN = "tok"
-            mock_settings.TWILIO_PHONE_NUMBER = "+18005551234"
+        with patch("app.services.sms_service.SmsService") as MockSms:
+            MockSms.return_value.send_message.return_value = {"status": "sent", "message_sid": "SM456"}
             result = await engine.execute_node(node, ctx, meta)
 
         assert result.context_patch.get("last_sms_status") == "sent"
+        kwargs = MockSms.return_value.send_message.call_args.kwargs
+        assert kwargs["to_phone"] == "+911234567890"
 
 
 # ─── Webhook Node ────────────────────────────────────────────────────

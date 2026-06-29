@@ -45,21 +45,21 @@ def test_tool_result_minimal():
 
 def test_tool_overrides_remove():
     overrides = build_tool_overrides(
-        tools=["get_order_status"],
+        tools=["check_loan_emi"],
         implementation="client",
         tools_remove=["old_tool_name", "legacy_tool_name"],
     )
     assert "toolOverrides" in overrides
     assert "add" in overrides["toolOverrides"]
     assert "remove" in overrides["toolOverrides"]
-    assert overrides["toolOverrides"]["add"][0]["temporaryTool"]["modelToolName"] == "get_order_status"
+    assert overrides["toolOverrides"]["add"][0]["temporaryTool"]["modelToolName"] == "check_loan_emi"
     assert "old_tool_name" in overrides["toolOverrides"]["remove"]
 
 
 def test_tool_overrides_replace():
     overrides = build_tool_overrides(
         tools_remove=["old_tool"],
-        tools_replace=["get_order_status"],
+        tools_replace=["check_loan_emi"],
         implementation="client",
     )
     assert "toolOverrides" in overrides
@@ -113,7 +113,7 @@ def test_ultravox_join_request_with_overrides():
 
 
 def test_build_tool_overrides_data_connection():
-    overrides = build_tool_overrides(["get_order_status"], implementation="dataConnection")
+    overrides = build_tool_overrides(["check_loan_emi"], implementation="dataConnection")
     assert "toolOverrides" in overrides
     assert overrides["toolOverrides"]["add"][0]["temporaryTool"]["dataConnection"] == {}
 

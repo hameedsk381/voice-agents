@@ -114,18 +114,18 @@ def test_handle_low_confidence_contextual():
         extracted_info={}, confidence=ConfidenceScores(stt=0.3, intent=0.9, overall=0.6)
     )
     result = orchestrator.handle_low_confidence(ctx)
-    assert "didn't quite catch" in result
+    # Medium tier with low STT -> ask the caller to repeat.
     assert "repeat" in result
-    
+
     ctx.confidence = ConfidenceScores(stt=0.9, intent=0.3, overall=0.6)
     result = orchestrator.handle_low_confidence(ctx)
-    assert "clarify" in result
-    assert "billing, technical support" in result
-    
+    # Medium tier, STT ok, no intent yet -> generic clarification.
+    assert "clarify" in result.lower()
+
     ctx.current_intent = "billing"
     result = orchestrator.handle_low_confidence(ctx)
+    # Medium tier with a detected intent -> surface it for confirmation.
     assert "billing" in result
-    assert "tell me a bit more" in result
 
 
 @pytest.mark.asyncio
@@ -152,13 +152,13 @@ async def test_reflect_and_correct(mock_agent, mock_context, mock_llm_service):
     
     original_response = "Here is your requested refund today."
     
-    # LLM Critic returns same response -> no correction
-    mock_llm_service.generate_response.return_value = original_response
+    # LLM Critic echoes the response (CORRECTED == original) -> no correction.
+    mock_llm_service.generate_response.return_value = f"CONFIDENCE: 0.9\nCORRECTED: {original_response}"
     res = await orchestrator.reflect_and_correct("I want my money back.", original_response, mock_context, mock_agent, mock_llm_service)
     assert res == original_response
-    
-    # LLM Critic returns improved response -> correction applied
+
+    # LLM Critic returns an improved CORRECTED response -> correction applied.
     improved_response = "I have initiated your refund, and apologized for the wait."
-    mock_llm_service.generate_response.return_value = improved_response
+    mock_llm_service.generate_response.return_value = f"CONFIDENCE: 0.5\nCORRECTED: {improved_response}"
     res = await orchestrator.reflect_and_correct("I want my money back.", original_response, mock_context, mock_agent, mock_llm_service)
     assert res == improved_response

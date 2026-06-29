@@ -63,8 +63,8 @@ def test_build_inactivity_messages_defaults():
     from app.orchestration.ultravox_call import build_inactivity_messages
     messages = build_inactivity_messages()
     assert len(messages) == 2
-    assert messages[0]["endBehaviour"] == "END_BEHAVIOR_UNSPECIFIED"
-    assert messages[1]["endBehaviour"] == "END_BEHAVIOR_HANG_UP_SOFT"
+    assert messages[0]["endBehavior"] == "END_BEHAVIOR_UNSPECIFIED"
+    assert messages[1]["endBehavior"] == "END_BEHAVIOR_HANG_UP_SOFT"
     assert messages[1]["duration"] == "120s"
 
 
